@@ -23,3 +23,4 @@ The artifacts would be built and available in the target/ folder.
 
 > [!NOTE]
 > The code style format is automatically enforced (including the missing license header, if any) using the [Spotless maven plugin](https://github.com/diffplug/spotless/tree/main/plugin-maven). This currently happens in the maven's `validate` stage.
+
