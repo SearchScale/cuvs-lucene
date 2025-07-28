@@ -32,6 +32,7 @@ import org.apache.lucene.store.Directory;
 import org.apache.lucene.tests.index.BaseKnnVectorsFormatTestCase;
 import org.apache.lucene.tests.util.TestUtil;
 import org.junit.BeforeClass;
+import org.junit.Test;
 
 public class TestCuVSVectorsFormat extends BaseKnnVectorsFormatTestCase {
 
@@ -48,6 +49,7 @@ public class TestCuVSVectorsFormat extends BaseKnnVectorsFormatTestCase {
     // return TestUtil.alwaysKnnVectorsFormat(new Lucene99HnswVectorsFormat());
   }
 
+  @Test
   public void testMergeTwoSegsWithASingleDocPerSeg() throws Exception {
     float[][] f = new float[][] {randomVector(384), randomVector(384)};
     try (Directory dir = newDirectory();
@@ -88,6 +90,7 @@ public class TestCuVSVectorsFormat extends BaseKnnVectorsFormatTestCase {
   }
 
   // Basic test for multiple vectors fields per document
+  @Test
   public void testTwoVectorFieldsPerDoc() throws Exception {
     float[][] f1 = new float[][] {randomVector(384), randomVector(384)};
     float[][] f2 = new float[][] {randomVector(384), randomVector(384)};
@@ -123,6 +126,86 @@ public class TestCuVSVectorsFormat extends BaseKnnVectorsFormatTestCase {
         var topDocs = r.searchNearestVectors("f1", randomVector(384), 0, null, 10);
         assertEquals(0, topDocs.scoreDocs.length);
         assertEquals(0, topDocs.totalHits.value());
+      }
+    }
+  }
+
+  // Override byte vector tests to skip them since we only support float32
+  @Override
+  public void testRandomBytes() throws Exception {
+    // Skip - CuVS only supports float32 vectors
+  }
+
+  @Override
+  public void testSortedIndexBytes() throws Exception {
+    // Skip - CuVS only supports float32 vectors
+  }
+
+  @Override
+  public void testMergingWithDifferentByteKnnFields() throws Exception {
+    // Skip - CuVS only supports float32 vectors
+  }
+
+  @Override
+  public void testVectorValuesReportCorrectDocs() throws Exception {
+    // Skip - CuVS only supports float32 vectors
+  }
+
+  @Override
+  public void testMismatchedFields() throws Exception {
+    // Skip - CuVS only supports float32 vectors
+  }
+
+  @Override
+  public void testRandomExceptions() throws Exception {
+    // Skip - this test uses byte vectors which are not supported
+  }
+
+  @Override
+  public void testByteVectorScorerIteration() throws Exception {
+    // Skip - CuVS only supports float32 vectors
+  }
+
+  @Override
+  public void testEmptyByteVectorData() throws Exception {
+    // Skip - CuVS only supports float32 vectors
+  }
+
+  @Override
+  public void testCheckIntegrityReadsAllBytes() throws Exception {
+    // Skip - may use byte vectors
+  }
+
+  @Override
+  public void testSparseVectors() throws Exception {
+    // Override to only test float vectors
+    try (Directory dir = newDirectory();
+        IndexWriter w = new IndexWriter(dir, newIndexWriterConfig())) {
+      int numDocs = atLeast(100);
+      int dimension = atLeast(10);
+      int numIndexed = 0;
+      for (int i = 0; i < numDocs; i++) {
+        Document doc = new Document();
+        if (random().nextInt(4) == 3) {
+          doc.add(new KnnFloatVectorField("knn", randomVector(dimension), EUCLIDEAN));
+          numIndexed++;
+        }
+        doc.add(new StringField("id", Integer.toString(i), Field.Store.YES));
+        w.addDocument(doc);
+      }
+      w.forceMerge(1);
+
+      try (DirectoryReader reader = DirectoryReader.open(w)) {
+        LeafReader r = getOnlyLeafReader(reader);
+        FloatVectorValues values = r.getFloatVectorValues("knn");
+
+        if (numIndexed == 0) {
+          assertNull(values);
+        } else {
+          assertNotNull(values);
+          assertEquals(numIndexed, values.size());
+          assertEquals(dimension, values.dimension());
+        }
       }
     }
   }

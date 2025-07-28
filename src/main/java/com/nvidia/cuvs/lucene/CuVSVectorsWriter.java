@@ -31,8 +31,8 @@ import com.nvidia.cuvs.BruteForceIndexParams;
 import com.nvidia.cuvs.CagraIndex;
 import com.nvidia.cuvs.CagraIndexParams;
 import com.nvidia.cuvs.CagraIndexParams.CagraGraphBuildAlgo;
+import com.nvidia.cuvs.CuVSMatrix;
 import com.nvidia.cuvs.CuVSResources;
-import com.nvidia.cuvs.Dataset;
 import java.io.IOException;
 import java.io.OutputStream;
 import java.nio.file.Files;
@@ -219,11 +219,11 @@ public class CuVSVectorsWriter extends KnnVectorsWriter {
     }
   }
 
-  private void writeCagraIndex(OutputStream os, Dataset dataset) throws Throwable {
+  private void writeCagraIndex(OutputStream os, CuVSMatrix dataset) throws Throwable {
     if (dataset.size() < 2) {
       throw new IllegalArgumentException(dataset.size() + " vectors, less than min [2] required");
     }
-    CagraIndexParams params = cagraIndexParams(dataset.size());
+    CagraIndexParams params = cagraIndexParams((int) dataset.size());
     long startTime = System.nanoTime();
     var index =
         CagraIndex.newBuilder(resources).withDataset(dataset).withIndexParams(params).build();
@@ -234,7 +234,7 @@ public class CuVSVectorsWriter extends KnnVectorsWriter {
     index.destroyIndex();
   }
 
-  private void writeBruteForceIndex(OutputStream os, Dataset dataset) throws Throwable {
+  private void writeBruteForceIndex(OutputStream os, CuVSMatrix dataset) throws Throwable {
     BruteForceIndexParams params =
         new BruteForceIndexParams.Builder()
             .withNumWriterThreads(32) // TODO: Make this configurable later.
@@ -248,11 +248,11 @@ public class CuVSVectorsWriter extends KnnVectorsWriter {
     index.destroyIndex();
   }
 
-  private void writeHNSWIndex(OutputStream os, Dataset dataset) throws Throwable {
+  private void writeHNSWIndex(OutputStream os, CuVSMatrix dataset) throws Throwable {
     if (dataset.size() < 2) {
       throw new IllegalArgumentException(dataset.size() + " vectors, less than min [2] required");
     }
-    CagraIndexParams indexParams = cagraIndexParams(dataset.size());
+    CagraIndexParams indexParams = cagraIndexParams((int) dataset.size());
     long startTime = System.nanoTime();
     var index =
         CagraIndex.newBuilder(resources).withDataset(dataset).withIndexParams(indexParams).build();
@@ -278,8 +278,8 @@ public class CuVSVectorsWriter extends KnnVectorsWriter {
   private void writeField(CuVSFieldWriter fieldData) throws IOException {
     // TODO: Argh! https://github.com/rapidsai/cuvs/issues/698
     List<float[]> vectors = fieldData.getVectors();
-    Dataset dataset = Dataset.create(vectors.size(), fieldData.fieldInfo().getVectorDimension());
-    for (float[] vec : vectors) dataset.addVector(vec);
+    float[][] vectorArray = vectors.toArray(new float[vectors.size()][]);
+    CuVSMatrix dataset = CuVSMatrix.ofArray(vectorArray);
     writeFieldInternal(fieldData.fieldInfo(), dataset);
   }
 
@@ -291,16 +291,15 @@ public class CuVSVectorsWriter extends KnnVectorsWriter {
     mapOldOrdToNewOrd(oldDocsWithFieldSet, sortMap, null, new2OldOrd, null);
 
     float[][] oldVectors = fieldData.getVectors().toArray(float[][]::new);
-    Dataset dataset =
-        Dataset.create(fieldData.getVectors().size(), fieldData.fieldInfo().getVectorDimension());
+    float[][] sortedVectors = new float[oldVectors.length][];
     for (int i = 0; i < oldVectors.length; i++) {
-      float[] vec = oldVectors[new2OldOrd[i]];
-      dataset.addVector(vec);
+      sortedVectors[i] = oldVectors[new2OldOrd[i]];
     }
+    CuVSMatrix dataset = CuVSMatrix.ofArray(sortedVectors);
     writeFieldInternal(fieldData.fieldInfo(), dataset);
   }
 
-  private void writeFieldInternal(FieldInfo fieldInfo, Dataset dataset) throws IOException {
+  private void writeFieldInternal(FieldInfo fieldInfo, CuVSMatrix dataset) throws IOException {
     if (dataset.size() == 0) {
       writeEmpty(fieldInfo);
       return;
@@ -360,7 +359,7 @@ public class CuVSVectorsWriter extends KnnVectorsWriter {
 
       writeMeta(
           fieldInfo,
-          dataset.size(),
+          (int) dataset.size(),
           cagraIndexOffset,
           cagraIndexLength,
           bruteForceIndexOffset,
@@ -424,20 +423,18 @@ public class CuVSVectorsWriter extends KnnVectorsWriter {
     handleThrowable(t);
   }
 
-  /** Copies the vector values into dst. Returns the actual number of vectors copied. */
-  private static int getVectorData(FloatVectorValues floatVectorValues, Dataset dataset)
+  /** Copies the vector values into a 2D array. Returns the vectors array. */
+  private static float[][] getVectorData(FloatVectorValues floatVectorValues, int expectedSize)
       throws IOException {
-    DocsWithFieldSet docsWithField = new DocsWithFieldSet();
-    int count = 0;
+    java.util.List<float[]> vectorList = new java.util.ArrayList<>();
     KnnVectorValues.DocIndexIterator iter = floatVectorValues.iterator();
     for (int docV = iter.nextDoc(); docV != NO_MORE_DOCS; docV = iter.nextDoc()) {
-      assert iter.index() == count;
-      // dst[iter.index()] = floatVectorValues.vectorValue(iter.index());
-      dataset.addVector(floatVectorValues.vectorValue(iter.index())); // is this correct?
-      docsWithField.add(docV);
-      count++;
+      float[] vector = floatVectorValues.vectorValue(iter.index());
+      if (vector != null) {
+        vectorList.add(vector);
+      }
     }
-    return docsWithField.cardinality();
+    return vectorList.toArray(new float[vectorList.size()][]);
   }
 
   @Override
@@ -452,8 +449,12 @@ public class CuVSVectorsWriter extends KnnVectorsWriter {
           };
 
       // Also will be replaced with the cuVS merge api
-      Dataset dataset = Dataset.create(mergedVectorValues.size(), mergedVectorValues.dimension());
-      getVectorData(mergedVectorValues, dataset);
+      float[][] vectorArray = getVectorData(mergedVectorValues, mergedVectorValues.size());
+      if (vectorArray.length == 0) {
+        writeEmpty(fieldInfo);
+        return;
+      }
+      CuVSMatrix dataset = CuVSMatrix.ofArray(vectorArray);
       writeFieldInternal(fieldInfo, dataset);
     } catch (Throwable t) {
       handleThrowable(t);
