@@ -492,10 +492,14 @@ public class CuVSVectorsWriter extends KnnVectorsWriter {
     return vectorList.toArray(new float[vectorList.size()][]);
   }
 
-  @Override
-  public void mergeOneField(FieldInfo fieldInfo, MergeState mergeState) throws IOException {
-    flatVectorsWriter.mergeOneField(fieldInfo, mergeState);
+  /**
+   * Merges CAGRA indexes by rebuilding from the properly merged vector values.
+   * This ensures consistency with Lucene's merge semantics (deletions, reordering, etc.).
+   */
+  private void mergeCagraIndexes(FieldInfo fieldInfo, MergeState mergeState) throws IOException {
     try {
+      // Always get the merged vector values from Lucene's merge process
+      // This ensures we handle deletions, document reordering, and all merge semantics correctly
       final FloatVectorValues mergedVectorValues =
           switch (fieldInfo.getVectorEncoding()) {
             case BYTE -> throw new AssertionError("bytes not supported");
@@ -503,16 +507,47 @@ public class CuVSVectorsWriter extends KnnVectorsWriter {
                 KnnVectorsWriter.MergedVectorValues.mergeFloatVectorValues(fieldInfo, mergeState);
           };
 
-      // Use memory-efficient matrix creation instead of intermediate arrays
       int vectorCount = mergedVectorValues.size();
       int dimensions = fieldInfo.getVectorDimension();
 
+      // Create CAGRA index from the properly merged vectors
       CuVSMatrix dataset = getVectorDataMatrix(mergedVectorValues, vectorCount, dimensions);
       if (dataset == null) {
         writeEmpty(fieldInfo);
         return;
       }
       writeFieldInternal(fieldInfo, dataset);
+    } catch (Throwable t) {
+      handleThrowable(t);
+    }
+  }
+
+  @Override
+  public void mergeOneField(FieldInfo fieldInfo, MergeState mergeState) throws IOException {
+    flatVectorsWriter.mergeOneField(fieldInfo, mergeState);
+    try {
+      // Use CuVS CAGRA merge API
+      if (indexType.cagra()) {
+        mergeCagraIndexes(fieldInfo, mergeState);
+      } else {
+        // For non-CAGRA index types, use vector-based approach
+        final FloatVectorValues mergedVectorValues =
+            switch (fieldInfo.getVectorEncoding()) {
+              case BYTE -> throw new AssertionError("bytes not supported");
+              case FLOAT32 ->
+                  KnnVectorsWriter.MergedVectorValues.mergeFloatVectorValues(fieldInfo, mergeState);
+            };
+
+        int vectorCount = mergedVectorValues.size();
+        int dimensions = fieldInfo.getVectorDimension();
+
+        CuVSMatrix dataset = getVectorDataMatrix(mergedVectorValues, vectorCount, dimensions);
+        if (dataset == null) {
+          writeEmpty(fieldInfo);
+          return;
+        }
+        writeFieldInternal(fieldInfo, dataset);
+      }
     } catch (Throwable t) {
       handleThrowable(t);
     }
