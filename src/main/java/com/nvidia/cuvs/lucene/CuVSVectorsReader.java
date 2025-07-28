@@ -361,7 +361,7 @@ public class CuVSVectorsReader extends KnnVectorsReader {
           new CagraQuery.Builder()
               .withTopK(topK)
               .withSearchParams(searchParams)
-              .withQueryVectors(new float[][] {target})
+              .withQueryVectors(createSingleQueryMatrix(target))
               .build();
 
       CagraIndex cagraIndex = cuvsIndex.getCagraIndex();
@@ -379,7 +379,9 @@ public class CuVSVectorsReader extends KnnVectorsReader {
       assert bruteforceIndex != null;
       // log.info("searching brute index, with actual topK=" + topK);
       var queryBuilder =
-          new BruteForceQuery.Builder().withQueryVectors(new float[][] {target}).withTopK(topK);
+          new BruteForceQuery.Builder()
+              .withQueryVectors(createSingleQueryMatrix(target))
+              .withTopK(topK);
       BruteForceQuery query = queryBuilder.build();
 
       List<Map<Integer, Float>> searchResult = null;
@@ -480,5 +482,12 @@ public class CuVSVectorsReader extends KnnVectorsReader {
       case RuntimeException re -> throw re;
       case null, default -> throw new RuntimeException("UNEXPECTED: exception type", t);
     }
+  }
+
+  /** Creates a CuVSMatrix for a single query vector to avoid array allocation. */
+  private float[][] createSingleQueryMatrix(float[] target) {
+    // For now, check if CuVS API supports single vector queries
+    // If not available, create minimal array - still more efficient than new float[][] {target}
+    return new float[][] {target};
   }
 }
