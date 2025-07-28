@@ -29,11 +29,13 @@ import org.apache.lucene.document.Field;
 import org.apache.lucene.document.KnnFloatVectorField;
 import org.apache.lucene.document.StringField;
 import org.apache.lucene.index.IndexReader;
+import org.apache.lucene.index.Term;
 import org.apache.lucene.index.VectorSimilarityFunction;
 import org.apache.lucene.search.IndexSearcher;
 import org.apache.lucene.search.KnnFloatVectorQuery;
 import org.apache.lucene.search.Query;
 import org.apache.lucene.search.ScoreDoc;
+import org.apache.lucene.search.TermQuery;
 import org.apache.lucene.store.Directory;
 import org.apache.lucene.tests.analysis.MockAnalyzer;
 import org.apache.lucene.tests.analysis.MockTokenizer;
@@ -88,7 +90,8 @@ public class TestCuVS extends LuceneTestCase {
       doc.add(new StringField("id", String.valueOf(i), Field.Store.YES));
       doc.add(newTextField("field", English.intToEnglish(i), Field.Store.YES));
       boolean skipVector =
-          random.nextInt(10) < 0; // disable testing with holes for now, there's some bug.
+          random.nextInt(10)
+              < 4; // some documents won't have vectors to test deleted/missing vectors
       if (!skipVector
           || datasetSize < 100) { // about 10th of the documents shouldn't have a single vector
         doc.add(new KnnFloatVectorField("vector", dataset[i], VectorSimilarityFunction.EUCLIDEAN));
@@ -203,5 +206,45 @@ public class TestCuVS extends LuceneTestCase {
 
     log.info("Expected results generated successfully.");
     return neighborsResult;
+  }
+
+  @Test
+  public void testVectorSearchWithFilter() throws IOException {
+    assumeTrue("cuvs not supported", CuVSVectorsFormat.supported());
+
+    Random random = random();
+    int topK = Math.min(random.nextInt(TOP_K_LIMIT) + 1, dataset.length);
+
+    if (dataset.length < topK) topK = dataset.length;
+
+    // Find a document that has a vector by doing a search first
+    Query unfiltered = new KnnFloatVectorQuery("vector", dataset[0], 1);
+    ScoreDoc[] unfilteredHits = searcher.search(unfiltered, 1).scoreDocs;
+
+    // Skip test if no vectors found at all
+    assumeTrue(
+        "Need at least one document with vector for filtering test", unfilteredHits.length > 0);
+
+    String targetDocId = reader.storedFields().document(unfilteredHits[0].doc).get("id");
+    float[] queryVector = dataset[0];
+
+    // Create a filter that matches only the document we know has a vector
+    Query filter = new TermQuery(new Term("id", targetDocId));
+
+    // Test the new constructor with filter
+    Query filteredQuery = new CuVSKnnFloatVectorQuery("vector", queryVector, topK, filter, topK, 1);
+
+    ScoreDoc[] filteredHits = searcher.search(filteredQuery, topK).scoreDocs;
+
+    // Ensure we got some results
+    assertTrue("Should have at least one result", filteredHits.length > 0);
+
+    // Verify that all results match the filter
+    for (ScoreDoc hit : filteredHits) {
+      String docId = reader.storedFields().document(hit.doc).get("id");
+      assertEquals("All results should match the filter", targetDocId, docId);
+    }
+
+    log.info("Prefiltering test passed with " + filteredHits.length + " results");
   }
 }
