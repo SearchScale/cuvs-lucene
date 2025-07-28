@@ -490,4 +490,16 @@ public class CuVSVectorsReader extends KnnVectorsReader {
     // If not available, create minimal array - still more efficient than new float[][] {target}
     return new float[][] {target};
   }
+
+  /**
+   * Gets the CuVSIndex for a given field name.
+   * This method is package-private to allow access from CuVSVectorsWriter for merging.
+   */
+  /*package-private*/ CuVSIndex getCuVSIndex(String fieldName) {
+    FieldInfo fieldInfo = fieldInfos.fieldInfo(fieldName);
+    if (fieldInfo == null) {
+      return null;
+    }
+    return cuvsIndices.get(fieldInfo.number);
+  }
 }
