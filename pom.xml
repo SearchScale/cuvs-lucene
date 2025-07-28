@@ -17,7 +17,7 @@
     <repository>
       <id>cuvs-java</id>
       <name>SearchScale Maven</name>
-      <url>https://maven.searchscale.com/snapshots</url>
+      <url>https://maven.searchscale.com/releases</url>
     </repository>
   </repositories>
 
@@ -67,7 +67,7 @@
     <dependency>
       <groupId>com.nvidia.cuvs</groupId>
       <artifactId>cuvs-java</artifactId>
-      <version>25.08.0</version>
+      <version>25.08.5</version>
     </dependency>
   </dependencies>
 

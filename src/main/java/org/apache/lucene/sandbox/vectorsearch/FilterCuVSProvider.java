@@ -17,8 +17,8 @@ package org.apache.lucene.sandbox.vectorsearch;
 
 import com.nvidia.cuvs.BruteForceIndex;
 import com.nvidia.cuvs.CagraIndex;
+import com.nvidia.cuvs.CuVSMatrix;
 import com.nvidia.cuvs.CuVSResources;
-import com.nvidia.cuvs.Dataset;
 import com.nvidia.cuvs.HnswIndex;
 import com.nvidia.cuvs.spi.CuVSProvider;
 import java.nio.file.Path;
@@ -65,7 +65,33 @@ import java.nio.file.Path;
   }
 
   @Override
-  public Dataset newDataset(int arg0, int arg1) throws UnsupportedOperationException {
-    return delegate.newDataset(arg0, arg1);
+  public com.nvidia.cuvs.TieredIndex.Builder newTieredIndexBuilder(CuVSResources cuVSResources)
+      throws UnsupportedOperationException {
+    return delegate.newTieredIndexBuilder(cuVSResources);
+  }
+
+  @Override
+  public CuVSMatrix newMatrixFromArray(byte[][] array) {
+    return delegate.newMatrixFromArray(array);
+  }
+
+  @Override
+  public CuVSMatrix newMatrixFromArray(int[][] array) {
+    return delegate.newMatrixFromArray(array);
+  }
+
+  @Override
+  public CuVSMatrix newMatrixFromArray(float[][] array) {
+    return delegate.newMatrixFromArray(array);
+  }
+
+  @Override
+  public java.lang.invoke.MethodHandle newNativeMatrixBuilder() {
+    return delegate.newNativeMatrixBuilder();
+  }
+
+  @Override
+  public CuVSMatrix.Builder newMatrixBuilder(int rows, int cols, CuVSMatrix.DataType dataType) {
+    return delegate.newMatrixBuilder(rows, cols, dataType);
   }
 }
