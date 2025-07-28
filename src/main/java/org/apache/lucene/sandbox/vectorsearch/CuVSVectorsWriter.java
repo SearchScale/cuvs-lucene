@@ -276,10 +276,13 @@ public class CuVSVectorsWriter extends KnnVectorsWriter {
   }
 
   private void writeField(CuVSFieldWriter fieldData) throws IOException {
-    // TODO: Argh! https://github.com/rapidsai/cuvs/issues/698
+    // Use memory-efficient matrix creation from vector list
     List<float[]> vectors = fieldData.getVectors();
-    float[][] vectorArray = vectors.toArray(new float[vectors.size()][]);
-    CuVSMatrix dataset = CuVSMatrix.ofArray(vectorArray);
+    CuVSMatrix dataset = createMatrixFromVectorList(vectors);
+    if (dataset == null) {
+      writeEmpty(fieldData.fieldInfo());
+      return;
+    }
     writeFieldInternal(fieldData.fieldInfo(), dataset);
   }
 
@@ -290,11 +293,20 @@ public class CuVSVectorsWriter extends KnnVectorsWriter {
 
     mapOldOrdToNewOrd(oldDocsWithFieldSet, sortMap, null, new2OldOrd, null);
 
-    float[][] oldVectors = fieldData.getVectors().toArray(float[][]::new);
-    float[][] sortedVectors = new float[oldVectors.length][];
-    for (int i = 0; i < oldVectors.length; i++) {
-      sortedVectors[i] = oldVectors[new2OldOrd[i]];
+    List<float[]> oldVectors = fieldData.getVectors();
+    if (oldVectors.isEmpty()) {
+      writeEmpty(fieldData.fieldInfo());
+      return;
     }
+
+    int vectorCount = oldVectors.size();
+
+    // Create sorted array directly with pre-allocated size
+    float[][] sortedVectors = new float[vectorCount][];
+    for (int i = 0; i < vectorCount; i++) {
+      sortedVectors[i] = oldVectors.get(new2OldOrd[i]);
+    }
+
     CuVSMatrix dataset = CuVSMatrix.ofArray(sortedVectors);
     writeFieldInternal(fieldData.fieldInfo(), dataset);
   }
@@ -423,8 +435,51 @@ public class CuVSVectorsWriter extends KnnVectorsWriter {
     handleThrowable(t);
   }
 
-  /** Copies the vector values into a 2D array. Returns the vectors array. */
-  private static float[][] getVectorData(FloatVectorValues floatVectorValues, int expectedSize)
+  /** Creates CuVSMatrix directly from FloatVectorValues without intermediate List. */
+  private CuVSMatrix getVectorDataMatrix(
+      FloatVectorValues floatVectorValues, int vectorCount, int dimensions) throws IOException {
+    if (vectorCount == 0) {
+      return null;
+    }
+
+    // Pre-allocate exact size array instead of using ArrayList
+    float[][] vectorArray = new float[vectorCount][];
+    KnnVectorValues.DocIndexIterator iter = floatVectorValues.iterator();
+    int rowIndex = 0;
+    for (int docV = iter.nextDoc(); docV != NO_MORE_DOCS; docV = iter.nextDoc()) {
+      float[] vector = floatVectorValues.vectorValue(iter.index());
+      if (vector != null) {
+        vectorArray[rowIndex++] = vector;
+      }
+    }
+
+    // Resize if needed (though vectorCount should be accurate)
+    if (rowIndex < vectorCount) {
+      float[][] resized = new float[rowIndex][];
+      System.arraycopy(vectorArray, 0, resized, 0, rowIndex);
+      vectorArray = resized;
+    }
+
+    // Handle empty case that CuVSMatrix.ofArray doesn't support
+    if (vectorArray.length == 0) {
+      return null;
+    }
+
+    return CuVSMatrix.ofArray(vectorArray);
+  }
+
+  /** Creates CuVSMatrix from List<float[]> efficiently with pre-allocated array. */
+  private CuVSMatrix createMatrixFromVectorList(List<float[]> vectors) {
+    if (vectors.isEmpty()) {
+      return null;
+    }
+
+    // Convert to array more efficiently
+    return CuVSMatrix.ofArray(vectors.toArray(new float[vectors.size()][]));
+  }
+
+  /** Legacy method that copies vector values into a 2D array. */
+  private static float[][] getVectorDataArray(FloatVectorValues floatVectorValues, int expectedSize)
       throws IOException {
     java.util.List<float[]> vectorList = new java.util.ArrayList<>();
     KnnVectorValues.DocIndexIterator iter = floatVectorValues.iterator();
@@ -448,13 +503,15 @@ public class CuVSVectorsWriter extends KnnVectorsWriter {
                 KnnVectorsWriter.MergedVectorValues.mergeFloatVectorValues(fieldInfo, mergeState);
           };
 
-      // Also will be replaced with the cuVS merge api
-      float[][] vectorArray = getVectorData(mergedVectorValues, mergedVectorValues.size());
-      if (vectorArray.length == 0) {
+      // Use memory-efficient matrix creation instead of intermediate arrays
+      int vectorCount = mergedVectorValues.size();
+      int dimensions = fieldInfo.getVectorDimension();
+
+      CuVSMatrix dataset = getVectorDataMatrix(mergedVectorValues, vectorCount, dimensions);
+      if (dataset == null) {
         writeEmpty(fieldInfo);
         return;
       }
-      CuVSMatrix dataset = CuVSMatrix.ofArray(vectorArray);
       writeFieldInternal(fieldInfo, dataset);
     } catch (Throwable t) {
       handleThrowable(t);
