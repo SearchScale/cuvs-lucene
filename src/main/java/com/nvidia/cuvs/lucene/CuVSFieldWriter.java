@@ -47,6 +47,20 @@ import org.apache.lucene.util.RamUsageEstimator;
               + fieldInfo.name
               + "\" appears more than once in this document (only one value is allowed per field)");
     }
+    lastDocID = docID;
+    // Debug: Track vector addition order for specific field and values
+    if ("f1".equals(fieldInfo.name)
+        && vectorValue.length > 0
+        && (Math.abs(vectorValue[0] - 0.7460972f) < 0.0001f
+            || Math.abs(vectorValue[0] - 0.15995985f) < 0.0001f)) {
+      System.out.println(
+          "CuVSFieldWriter.addValue: field="
+              + fieldInfo.name
+              + ", docID="
+              + docID
+              + ", vectorValue[0]="
+              + vectorValue[0]);
+    }
     flatFieldVectorsWriter.addValue(docID, vectorValue);
   }
 
