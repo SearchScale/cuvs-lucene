@@ -43,7 +43,7 @@ public class CuVSVectorsFormat extends KnnVectorsFormat {
 
   public static final int DEFAULT_WRITER_THREADS = 32;
   public static final int DEFAULT_INTERMEDIATE_GRAPH_DEGREE = 128;
-  public static final int DEFAULT_GRAPH_DEGREE = 64;
+  public static final int DEFAULT_GRAPH_DEGREE = 128;
   public static final IndexType DEFAULT_INDEX_TYPE = IndexType.CAGRA;
 
   static CuVSResources resources = cuVSResourcesOrNull();

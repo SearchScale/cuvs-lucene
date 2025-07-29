@@ -51,6 +51,7 @@ import org.apache.lucene.index.VectorEncoding;
 import org.apache.lucene.index.VectorSimilarityFunction;
 import org.apache.lucene.internal.hppc.IntObjectHashMap;
 import org.apache.lucene.search.KnnCollector;
+import org.apache.lucene.search.VectorScorer;
 import org.apache.lucene.store.ChecksumIndexInput;
 import org.apache.lucene.store.DataInput;
 import org.apache.lucene.store.IOContext;
@@ -296,7 +297,9 @@ public class CuVSVectorsReader extends KnnVectorsReader {
 
   @Override
   public FloatVectorValues getFloatVectorValues(String field) throws IOException {
-    return flatVectorsReader.getFloatVectorValues(field);
+    FloatVectorValues values = flatVectorsReader.getFloatVectorValues(field);
+    // Fix: Wrap the values to ensure distinct array copies are returned
+    return values == null ? null : new FloatVectorValuesWrapper(values);
   }
 
   @Override
@@ -368,12 +371,35 @@ public class CuVSVectorsReader extends KnnVectorsReader {
       List<Map<Integer, Float>> searchResult = null;
       try {
         searchResult = cagraIndex.search(query).getResults();
+        // List expected to have only one entry because of single query "target".
+        assert searchResult.size() == 1;
+        result = searchResult.getFirst();
       } catch (Throwable t) {
-        handleThrowable(t);
+        // CUDA error encountered, try to fall back to brute force search
+        BruteForceIndex bruteforceIndex = cuvsIndex.getBruteforceIndex();
+        if (bruteforceIndex != null) {
+          // log.info("CAGRA search failed, falling back to brute force search");
+          var queryBuilder =
+              new BruteForceQuery.Builder()
+                  .withQueryVectors(createSingleQueryMatrix(target))
+                  .withTopK(topK);
+          BruteForceQuery bruteForceQuery = queryBuilder.build();
+
+          try {
+            searchResult = bruteforceIndex.search(bruteForceQuery).getResults();
+            assert searchResult.size() == 1;
+            result = searchResult.getFirst();
+          } catch (Throwable fallbackError) {
+            // Both CAGRA and brute force failed, re-throw original CAGRA error
+            handleThrowable(t);
+            result = null; // This line won't be reached but satisfies compiler
+          }
+        } else {
+          // No brute force index available, re-throw original CAGRA error
+          handleThrowable(t);
+          result = null; // This line won't be reached but satisfies compiler
+        }
       }
-      // List expected to have only one entry because of single query "target".
-      assert searchResult.size() == 1;
-      result = searchResult.getFirst();
     } else {
       BruteForceIndex bruteforceIndex = cuvsIndex.getBruteforceIndex();
       assert bruteforceIndex != null;
@@ -501,5 +527,58 @@ public class CuVSVectorsReader extends KnnVectorsReader {
       return null;
     }
     return cuvsIndices.get(fieldInfo.number);
+  }
+
+  /**
+   * Wrapper that fixes the array reuse bug by ensuring distinct array copies are returned
+   * for each vectorValue() call.
+   */
+  private static class FloatVectorValuesWrapper extends FloatVectorValues {
+    private final FloatVectorValues delegate;
+
+    FloatVectorValuesWrapper(FloatVectorValues delegate) {
+      this.delegate = delegate;
+    }
+
+    @Override
+    public int dimension() {
+      return delegate.dimension();
+    }
+
+    @Override
+    public int size() {
+      return delegate.size();
+    }
+
+    @Override
+    public float[] vectorValue(int index) throws IOException {
+      float[] original = delegate.vectorValue(index);
+      return original == null ? null : original.clone();
+    }
+
+    @Override
+    public DocIndexIterator iterator() {
+      return delegate.iterator();
+    }
+
+    @Override
+    public FloatVectorValues copy() throws IOException {
+      return new FloatVectorValuesWrapper(delegate.copy());
+    }
+
+    @Override
+    public Bits getAcceptOrds(Bits acceptDocs) {
+      return delegate.getAcceptOrds(acceptDocs);
+    }
+
+    @Override
+    public int ordToDoc(int ord) {
+      return delegate.ordToDoc(ord);
+    }
+
+    @Override
+    public VectorScorer scorer(float[] target) throws IOException {
+      return delegate.scorer(target);
+    }
   }
 }

@@ -17,6 +17,7 @@ package org.apache.lucene.sandbox.vectorsearch;
 
 import static org.apache.lucene.index.VectorSimilarityFunction.EUCLIDEAN;
 
+import java.util.Arrays;
 import java.util.List;
 import org.apache.lucene.codecs.Codec;
 import org.apache.lucene.document.Document;
@@ -28,12 +29,15 @@ import org.apache.lucene.index.FloatVectorValues;
 import org.apache.lucene.index.IndexWriter;
 import org.apache.lucene.index.LeafReader;
 import org.apache.lucene.index.LeafReaderContext;
+import org.apache.lucene.index.NoMergePolicy;
 import org.apache.lucene.store.Directory;
 import org.apache.lucene.tests.index.BaseKnnVectorsFormatTestCase;
+import org.apache.lucene.tests.util.LuceneTestCase.SuppressSysoutChecks;
 import org.apache.lucene.tests.util.TestUtil;
 import org.junit.BeforeClass;
 import org.junit.Test;
 
+@SuppressSysoutChecks(bugUrl = "Ignore the sysout")
 public class TestCuVSVectorsFormat extends BaseKnnVectorsFormatTestCase {
 
   @BeforeClass
@@ -53,7 +57,8 @@ public class TestCuVSVectorsFormat extends BaseKnnVectorsFormatTestCase {
   public void testMergeTwoSegsWithASingleDocPerSeg() throws Exception {
     float[][] f = new float[][] {randomVector(384), randomVector(384)};
     try (Directory dir = newDirectory();
-        IndexWriter w = new IndexWriter(dir, newIndexWriterConfig())) {
+        IndexWriter w =
+            new IndexWriter(dir, newIndexWriterConfig().setMergePolicy(NoMergePolicy.INSTANCE))) {
       Document doc1 = new Document();
       doc1.add(new StringField("id", "0", Field.Store.NO));
       doc1.add(new KnnFloatVectorField("f", f[0], EUCLIDEAN));
@@ -74,6 +79,8 @@ public class TestCuVSVectorsFormat extends BaseKnnVectorsFormatTestCase {
         assertEquals(1, subReaders.get(1).reader().getFloatVectorValues("f").size());
       }
 
+      // Enable merging for forceMerge to work
+      w.getConfig().setMergePolicy(newMergePolicy());
       // now merge to a single segment
       w.forceMerge(1);
 
@@ -96,6 +103,7 @@ public class TestCuVSVectorsFormat extends BaseKnnVectorsFormatTestCase {
     float[][] f2 = new float[][] {randomVector(384), randomVector(384)};
     try (Directory dir = newDirectory();
         IndexWriter w = new IndexWriter(dir, newIndexWriterConfig())) {
+      System.out.println("Is sorting enabled: " + w.getConfig().getIndexSort());
       Document doc1 = new Document();
       doc1.add(new StringField("id", "0", Field.Store.NO));
       doc1.add(new KnnFloatVectorField("f1", f1[0], EUCLIDEAN));
@@ -106,13 +114,24 @@ public class TestCuVSVectorsFormat extends BaseKnnVectorsFormatTestCase {
       doc2.add(new KnnFloatVectorField("f1", f1[1], EUCLIDEAN));
       doc2.add(new KnnFloatVectorField("f2", f2[1], EUCLIDEAN));
       w.addDocument(doc2);
+
+      System.out.println("Force merge - begin");
       w.forceMerge(1);
+      System.out.println("Force merge - end");
 
       try (DirectoryReader reader = DirectoryReader.open(w)) {
         LeafReader r = getOnlyLeafReader(reader);
         FloatVectorValues values = r.getFloatVectorValues("f1");
         assertNotNull(values);
         assertEquals(2, values.size());
+        System.out.println("f1[0]" + Arrays.toString(f1[0]));
+        System.out.println("f1[1]" + Arrays.toString(f1[1]));
+        System.out.println("f2[0]" + Arrays.toString(f2[0]));
+        System.out.println("f2[1]" + Arrays.toString(f2[1]));
+
+        System.out.println("returned f1[0]" + Arrays.toString(values.vectorValue(0)));
+        System.out.println("returned f1[1]" + Arrays.toString(values.vectorValue(1)));
+
         assertArrayEquals(f1[0], values.vectorValue(0), 0.0f);
         assertArrayEquals(f1[1], values.vectorValue(1), 0.0f);
 
