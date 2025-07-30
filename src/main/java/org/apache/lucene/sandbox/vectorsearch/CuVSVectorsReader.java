@@ -75,6 +75,9 @@ public class CuVSVectorsReader extends KnnVectorsReader {
   private final IntObjectHashMap<CuVSIndex> cuvsIndices;
   private final IndexInput cuvsIndexInput;
 
+  // ThreadLocal cache for CuVSResources - one per thread for thread safety
+  private static final ThreadLocal<CuVSResources> threadLocalResources = new ThreadLocal<>();
+
   public CuVSVectorsReader(
       SegmentReadState state, CuVSResources resources, FlatVectorsReader flatReader)
       throws IOException {
@@ -284,6 +287,18 @@ public class CuVSVectorsReader extends KnnVectorsReader {
             Stream.of(flatVectorsReader, cuvsIndexInput),
             stream(cuvsIndices.values().iterator()).map(cursor -> cursor.value));
     IOUtils.close(closeableStream::iterator);
+
+    // Clean up any thread-local resources
+    CuVSResources threadResources = threadLocalResources.get();
+    if (threadResources != null) {
+      try {
+        // CuVSResources cleanup - no explicit close method available
+      } catch (Throwable t) {
+        handleThrowable(t);
+      } finally {
+        threadLocalResources.remove();
+      }
+    }
   }
 
   static <T> Stream<T> stream(Iterator<T> iterator) {
@@ -354,14 +369,17 @@ public class CuVSVectorsReader extends KnnVectorsReader {
     Map<Integer, Float> result;
     if (knnCollector.k() <= 1024 && cuvsIndex.getCagraIndex() != null) {
       // log.info("searching cagra index");
+      // Get or create thread-local CuVSResources for this thread
+      CuVSResources threadResources = getOrCreateThreadLocalResources();
+
       CagraSearchParams searchParams =
-          new CagraSearchParams.Builder(resources)
+          new CagraSearchParams.Builder()
               .withItopkSize(topK) // TODO: params
               .withSearchWidth(1)
               .build();
 
       var query =
-          new CagraQuery.Builder()
+          new CagraQuery.Builder(threadResources)
               .withTopK(topK)
               .withSearchParams(searchParams)
               .withQueryVectors(createSingleQueryMatrix(target))
@@ -380,7 +398,7 @@ public class CuVSVectorsReader extends KnnVectorsReader {
         if (bruteforceIndex != null) {
           // log.info("CAGRA search failed, falling back to brute force search");
           var queryBuilder =
-              new BruteForceQuery.Builder()
+              new BruteForceQuery.Builder(threadResources)
                   .withQueryVectors(createSingleQueryMatrix(target))
                   .withTopK(topK);
           BruteForceQuery bruteForceQuery = queryBuilder.build();
@@ -404,8 +422,9 @@ public class CuVSVectorsReader extends KnnVectorsReader {
       BruteForceIndex bruteforceIndex = cuvsIndex.getBruteforceIndex();
       assert bruteforceIndex != null;
       // log.info("searching brute index, with actual topK=" + topK);
+      CuVSResources threadResources = getOrCreateThreadLocalResources();
       var queryBuilder =
-          new BruteForceQuery.Builder()
+          new BruteForceQuery.Builder(threadResources)
               .withQueryVectors(createSingleQueryMatrix(target))
               .withTopK(topK);
       BruteForceQuery query = queryBuilder.build();
@@ -515,6 +534,24 @@ public class CuVSVectorsReader extends KnnVectorsReader {
     // For now, check if CuVS API supports single vector queries
     // If not available, create minimal array - still more efficient than new float[][] {target}
     return new float[][] {target};
+  }
+
+  /**
+   * Gets or creates a CuVSResources instance for the current thread.
+   * The instance is cached in ThreadLocal for subsequent use in the same thread.
+   * This ensures thread safety during CAGRA queries.
+   */
+  private CuVSResources getOrCreateThreadLocalResources() throws IOException {
+    CuVSResources threadResources = threadLocalResources.get();
+    if (threadResources == null) {
+      try {
+        threadResources = CuVSResources.create();
+        threadLocalResources.set(threadResources);
+      } catch (Throwable t) {
+        handleThrowable(t);
+      }
+    }
+    return threadResources;
   }
 
   /**
