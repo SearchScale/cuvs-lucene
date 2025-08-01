@@ -33,12 +33,17 @@ public class CuVSCodec extends FilterCodec {
   boolean nativeOnly = false;
 
   public CuVSCodec(boolean nativeOnly) {
-    this("CuVSCodec", new Lucene101Codec());
-    this.nativeOnly = true;
+    super("CuVSCodec", new Lucene101Codec());
+    this.nativeOnly = nativeOnly;
+    initializeFormat();
   }
 
   public CuVSCodec(String name, Codec delegate) {
     super(name, delegate);
+    initializeFormat();
+  }
+
+  private void initializeFormat() {
     KnnVectorsFormat format;
     try {
       if (nativeOnly) {

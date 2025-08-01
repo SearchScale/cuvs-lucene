@@ -43,7 +43,10 @@ public class NativeHNSWSerialization {
   public static void main(String[] args) throws IOException {
 
     Codec codec = new CuVSCodec(true);
-    IndexWriterConfig config = new IndexWriterConfig().setCodec(codec);
+    IndexWriterConfig config =
+        new IndexWriterConfig()
+            .setCodec(codec)
+            .setUseCompoundFile(false); // Disable CFS to see individual index files
 
     // Override to only test float vectors
     try (Directory dir = FSDirectory.open(Paths.get("myindex"));
