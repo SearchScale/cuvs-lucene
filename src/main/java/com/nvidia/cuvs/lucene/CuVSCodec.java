@@ -30,11 +30,22 @@ public class CuVSCodec extends FilterCodec {
     this("CuVSCodec", new Lucene101Codec());
   }
 
+  boolean nativeOnly = false;
+
+  public CuVSCodec(boolean nativeOnly) {
+    this("CuVSCodec", new Lucene101Codec());
+    this.nativeOnly = true;
+  }
+
   public CuVSCodec(String name, Codec delegate) {
     super(name, delegate);
     KnnVectorsFormat format;
     try {
-      format = new CuVSVectorsFormat(1, 128, 64, IndexType.CAGRA);
+      if (nativeOnly) {
+        format = new CuVSVectorsFormat(1, 128, 64, IndexType.HNSW_LUCENE);
+      } else {
+        format = new CuVSVectorsFormat(1, 128, 64, IndexType.CAGRA);
+      }
       setKnnFormat(format);
     } catch (LibraryException ex) {
       Logger log = Logger.getLogger(CuVSCodec.class.getName());
