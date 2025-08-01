@@ -67,7 +67,7 @@
     <dependency>
       <groupId>com.nvidia.cuvs</groupId>
       <artifactId>cuvs-java</artifactId>
-      <version>25.8.0-4f53f-SNAPSHOT</version>
+      <version>25.8.0-c9599-SNAPSHOT</version>
     </dependency>
   </dependencies>
 

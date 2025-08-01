@@ -94,19 +94,22 @@ public class CuVSVectorsWriter extends KnnVectorsWriter {
   /** The CuVS index Type. */
   public enum IndexType {
     /** Builds a Cagra index. */
-    CAGRA(true, false, false),
+    CAGRA(true, false, false, false),
     /** Builds a Brute Force index. */
-    BRUTE_FORCE(false, true, false),
+    BRUTE_FORCE(false, true, false, false),
     /** Builds an HSNW index - suitable for searching on CPU. */
-    HNSW(false, false, true),
+    HNSW(false, false, true, false),
     /** Builds a Cagra and a Brute Force index. */
-    CAGRA_AND_BRUTE_FORCE(true, true, false);
-    private final boolean cagra, bruteForce, hnsw;
+    CAGRA_AND_BRUTE_FORCE(true, true, false, false),
+    /** Builds a Lucene HNSW index via CAGRA. */
+    HNSW_LUCENE(false, false, false, true);
+    private final boolean cagra, bruteForce, hnsw, hnswLucene;
 
-    IndexType(boolean cagra, boolean bruteForce, boolean hnsw) {
+    IndexType(boolean cagra, boolean bruteForce, boolean hnsw, boolean hnswLucene) {
       this.cagra = cagra;
       this.bruteForce = bruteForce;
       this.hnsw = hnsw;
+      this.hnswLucene = hnswLucene;
     }
 
     public boolean cagra() {
@@ -119,6 +122,10 @@ public class CuVSVectorsWriter extends KnnVectorsWriter {
 
     public boolean hnsw() {
       return hnsw;
+    }
+
+    public boolean hnswLucene() {
+      return hnswLucene;
     }
   }
 
@@ -221,13 +228,117 @@ public class CuVSVectorsWriter extends KnnVectorsWriter {
     }
   }
 
+  private void writeFieldInternal(FieldInfo fieldInfo, CuVSMatrix dataset) throws IOException {
+	    if (dataset.size() == 0) {
+	      writeEmpty(fieldInfo);
+	      return;
+	    }
+	    long cagraIndexOffset, cagraIndexLength = 0L;
+	    long bruteForceIndexOffset, bruteForceIndexLength = 0L;
+	    long hnswIndexOffset, hnswIndexLength = 0L;
+
+	    // workaround for the minimum number of vectors for Cagra
+	    IndexType indexType =
+	        this.indexType.cagra() && dataset.size() < MIN_CAGRA_INDEX_SIZE
+	            ? IndexType.BRUTE_FORCE
+	            : this.indexType;
+
+	    try {
+	      cagraIndexOffset = cuvsIndex.getFilePointer();
+	      if (indexType.cagra()) {
+	        try {
+	          var cagraIndexOutputStream = new IndexOutputOutputStream(cuvsIndex);
+	          writeCagraIndex(cagraIndexOutputStream, dataset);
+	        } catch (Throwable t) {
+	          handleThrowableWithIgnore(t, CANNOT_GENERATE_CAGRA);
+	          // workaround for cuVS issue
+	          indexType = IndexType.BRUTE_FORCE;
+	        }
+	        cagraIndexLength = cuvsIndex.getFilePointer() - cagraIndexOffset;
+	      }
+
+	      if (indexType.hnswLucene()) {
+	        log.info("Entered the writeFieldInternal's HNSW LUCENE block");
+	        try {
+	          var cagraIndexOutputStream = new IndexOutputOutputStream(cuvsIndex);
+	          writeNativeLuceneCagraIndex(cagraIndexOutputStream, dataset);
+	        } catch (Throwable t) {
+	          handleThrowableWithIgnore(t, CANNOT_GENERATE_CAGRA);
+	          // workaround for cuVS issue
+	          indexType = IndexType.BRUTE_FORCE;
+	        }
+	        cagraIndexLength = cuvsIndex.getFilePointer() - cagraIndexOffset;
+	      }
+
+	      bruteForceIndexOffset = cuvsIndex.getFilePointer();
+	      if (indexType.bruteForce()) {
+	        var bruteForceIndexOutputStream = new IndexOutputOutputStream(cuvsIndex);
+	        writeBruteForceIndex(bruteForceIndexOutputStream, dataset);
+	        bruteForceIndexLength = cuvsIndex.getFilePointer() - bruteForceIndexOffset;
+	      }
+
+	      hnswIndexOffset = cuvsIndex.getFilePointer();
+	      if (indexType.hnsw()) {
+	        var hnswIndexOutputStream = new IndexOutputOutputStream(cuvsIndex);
+	        if (dataset.size() > MIN_CAGRA_INDEX_SIZE) {
+	          try {
+	            writeHNSWIndex(hnswIndexOutputStream, dataset);
+	          } catch (Throwable t) {
+	            handleThrowableWithIgnore(t, CANNOT_GENERATE_CAGRA);
+	          }
+	        }
+	        hnswIndexLength = cuvsIndex.getFilePointer() - hnswIndexOffset;
+	      }
+
+	      // StringBuilder sb = new StringBuilder("writeField ");
+	      // sb.append(": fieldInfo.name=").append(fieldInfo.name);
+	      // sb.append(", fieldInfo.number=").append(fieldInfo.number);
+	      // sb.append(", size=").append(vectors.length);
+	      // sb.append(", cagraIndexLength=").append(cagraIndexLength);
+	      // sb.append(", bruteForceIndexLength=").append(bruteForceIndexLength);
+	      // sb.append(", hnswIndexLength=").append(hnswIndexLength);
+	      // log.info(sb.toString());
+
+	      writeMeta(
+	          fieldInfo,
+	          (int) dataset.size(),
+	          cagraIndexOffset,
+	          cagraIndexLength,
+	          bruteForceIndexOffset,
+	          bruteForceIndexLength,
+	          hnswIndexOffset,
+	          hnswIndexLength);
+	    } catch (Throwable t) {
+	      handleThrowable(t);
+	    }
+	  }
+
+  private void writeNativeLuceneCagraIndex(OutputStream os, CuVSMatrix dataset) throws Throwable {
+	  if (dataset.size() < 2) {
+		  throw new IllegalArgumentException(dataset.size() + " vectors, less than min [2] required");
+	  }
+	  CagraIndexParams params = cagraIndexParams((int) dataset.size());
+	  long startTime = System.nanoTime();
+	  CagraIndex index =
+			  CagraIndex.newBuilder(resources).withDataset(dataset).withIndexParams(params).build();
+	  
+	  // TODO: Use getGraph() functionality from the above CagraIndex to
+	  // create an OnHeapHNSWGraph. Then serialize it to .vec and .vex files.
+	  
+	  long elapsedMillis = nanosToMillis(System.nanoTime() - startTime);
+	  info("Cagra index created in " + elapsedMillis + "ms, with " + dataset.size() + " vectors");
+	  Path tmpFile = Files.createTempFile(resources.tempDirectory(), "tmpindex", "cag");
+	  index.serialize(os, tmpFile);
+	  index.destroyIndex();
+  }
+  
   private void writeCagraIndex(OutputStream os, CuVSMatrix dataset) throws Throwable {
     if (dataset.size() < 2) {
       throw new IllegalArgumentException(dataset.size() + " vectors, less than min [2] required");
     }
     CagraIndexParams params = cagraIndexParams((int) dataset.size());
     long startTime = System.nanoTime();
-    var index =
+    CagraIndex index =
         CagraIndex.newBuilder(resources).withDataset(dataset).withIndexParams(params).build();
     long elapsedMillis = nanosToMillis(System.nanoTime() - startTime);
     info("Cagra index created in " + elapsedMillis + "ms, with " + dataset.size() + " vectors");
@@ -311,78 +422,6 @@ public class CuVSVectorsWriter extends KnnVectorsWriter {
 
     CuVSMatrix dataset = CuVSMatrix.ofArray(sortedVectors);
     writeFieldInternal(fieldData.fieldInfo(), dataset);
-  }
-
-  private void writeFieldInternal(FieldInfo fieldInfo, CuVSMatrix dataset) throws IOException {
-    if (dataset.size() == 0) {
-      writeEmpty(fieldInfo);
-      return;
-    }
-    long cagraIndexOffset, cagraIndexLength = 0L;
-    long bruteForceIndexOffset, bruteForceIndexLength = 0L;
-    long hnswIndexOffset, hnswIndexLength = 0L;
-
-    // workaround for the minimum number of vectors for Cagra
-    IndexType indexType =
-        this.indexType.cagra() && dataset.size() < MIN_CAGRA_INDEX_SIZE
-            ? IndexType.BRUTE_FORCE
-            : this.indexType;
-
-    try {
-      cagraIndexOffset = cuvsIndex.getFilePointer();
-      if (indexType.cagra()) {
-        try {
-          var cagraIndexOutputStream = new IndexOutputOutputStream(cuvsIndex);
-          writeCagraIndex(cagraIndexOutputStream, dataset);
-        } catch (Throwable t) {
-          handleThrowableWithIgnore(t, CANNOT_GENERATE_CAGRA);
-          // workaround for cuVS issue
-          indexType = IndexType.BRUTE_FORCE;
-        }
-        cagraIndexLength = cuvsIndex.getFilePointer() - cagraIndexOffset;
-      }
-
-      bruteForceIndexOffset = cuvsIndex.getFilePointer();
-      if (indexType.bruteForce()) {
-        var bruteForceIndexOutputStream = new IndexOutputOutputStream(cuvsIndex);
-        writeBruteForceIndex(bruteForceIndexOutputStream, dataset);
-        bruteForceIndexLength = cuvsIndex.getFilePointer() - bruteForceIndexOffset;
-      }
-
-      hnswIndexOffset = cuvsIndex.getFilePointer();
-      if (indexType.hnsw()) {
-        var hnswIndexOutputStream = new IndexOutputOutputStream(cuvsIndex);
-        if (dataset.size() > MIN_CAGRA_INDEX_SIZE) {
-          try {
-            writeHNSWIndex(hnswIndexOutputStream, dataset);
-          } catch (Throwable t) {
-            handleThrowableWithIgnore(t, CANNOT_GENERATE_CAGRA);
-          }
-        }
-        hnswIndexLength = cuvsIndex.getFilePointer() - hnswIndexOffset;
-      }
-
-      // StringBuilder sb = new StringBuilder("writeField ");
-      // sb.append(": fieldInfo.name=").append(fieldInfo.name);
-      // sb.append(", fieldInfo.number=").append(fieldInfo.number);
-      // sb.append(", size=").append(vectors.length);
-      // sb.append(", cagraIndexLength=").append(cagraIndexLength);
-      // sb.append(", bruteForceIndexLength=").append(bruteForceIndexLength);
-      // sb.append(", hnswIndexLength=").append(hnswIndexLength);
-      // log.info(sb.toString());
-
-      writeMeta(
-          fieldInfo,
-          (int) dataset.size(),
-          cagraIndexOffset,
-          cagraIndexLength,
-          bruteForceIndexOffset,
-          bruteForceIndexLength,
-          hnswIndexOffset,
-          hnswIndexLength);
-    } catch (Throwable t) {
-      handleThrowable(t);
-    }
   }
 
   private void writeEmpty(FieldInfo fieldInfo) throws IOException {
