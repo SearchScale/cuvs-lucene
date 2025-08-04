@@ -1,3 +1,18 @@
+/*
+ * Copyright (c) 2025, NVIDIA CORPORATION.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
 import static org.apache.lucene.index.VectorSimilarityFunction.EUCLIDEAN;
 
 import java.io.IOException;
@@ -5,7 +20,7 @@ import java.nio.file.Paths;
 import java.util.List;
 import java.util.Random;
 import org.apache.lucene.codecs.Codec;
-import org.apache.lucene.codecs.lucene101.Lucene101Codec;
+import com.nvidia.cuvs.lucene.CuVSCodec;
 import org.apache.lucene.document.Document;
 import org.apache.lucene.document.Field;
 import org.apache.lucene.document.KnnFloatVectorField;
@@ -20,29 +35,29 @@ import org.apache.lucene.index.LeafReaderContext;
 import org.apache.lucene.store.Directory;
 import org.apache.lucene.store.FSDirectory;
 
-public class NativeHNSWLucene101 {
+public class NativeHNSWSerialization {
 
   public static Random random = new Random(42);
 
   public static void main(String[] args) throws IOException {
 
-    // Use standard Lucene101Codec instead of CuVSCodec
-    Codec codec = new Lucene101Codec();
+    Codec codec = new CuVSCodec(true);
     IndexWriterConfig config =
         new IndexWriterConfig()
             .setCodec(codec)
             .setUseCompoundFile(false); // Disable CFS to see individual index files
 
-    // Create index with pure Lucene101 codec
-    try (Directory dir = FSDirectory.open(Paths.get("myindex_lucene101"));
+    // Override to only test float vectors
+    try (Directory dir = FSDirectory.open(Paths.get("helloindex"));
         IndexWriter w = new IndexWriter(dir, config)) {
       int numDocs = 100;
       int dimension = 10;
       int numIndexed = 0;
       for (int i = 0; i < numDocs; i++) {
         Document doc = new Document();
-        doc.add(new KnnFloatVectorField("knn1", randomVector(dimension), EUCLIDEAN));
-        doc.add(new KnnFloatVectorField("knn2", randomVector(dimension), EUCLIDEAN));
+        var vecs = randomVector(dimension);
+        doc.add(new KnnFloatVectorField("knn1", vecs, EUCLIDEAN));
+        doc.add(new KnnFloatVectorField("knn2", vecs, EUCLIDEAN));
         numIndexed++;
 
         doc.add(new StringField("id", Integer.toString(i), Field.Store.YES));
@@ -50,13 +65,19 @@ public class NativeHNSWLucene101 {
       }
       w.forceMerge(1);
 
-      // Verify the index can be read
+      // TODO Write an assert for a KNN query
       try (DirectoryReader reader = DirectoryReader.open(w)) {
 
-        System.out.println("=== Pure Lucene101 Index Created Successfully ===");
+        // System.out.println("Files in this directory: " +
+        // Arrays.toString(reader.directory().listAll()).replaceAll(" ", "\n"));
         for (String file : reader.directory().listAll()) {
           System.out.println(file + ": " + reader.directory().fileLength(file));
         }
+
+        /*IndexInput ip = reader.directory().openInput("_0_CuVSVectorsFormat_0.vemf", IOContext.READONCE);
+        byte[] b = new byte[(int)ip.length()];
+        ip.readBytes(b, 0, (int)ip.length());
+        System.out.println("Contents: " + new String(b));*/
 
         LeafReader r = getOnlyLeafReader(reader);
         FloatVectorValues values1 = r.getFloatVectorValues("knn1");
@@ -70,8 +91,6 @@ public class NativeHNSWLucene101 {
           System.out.println(
               "knn2 - Size: " + values2.size() + ", Dimension: " + values2.dimension());
         }
-        
-        System.out.println("✓ Index created with Lucene101Codec and is readable!");
       }
     }
   }

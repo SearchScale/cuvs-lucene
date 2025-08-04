@@ -560,6 +560,14 @@ public class CuVSVectorsWriter extends KnnVectorsWriter {
       HnswGraph graph,
       int[][] graphLevelNodeOffsets)
       throws IOException {
+    System.out.println(
+        "=== writeMeta: Writing field "
+            + field.name
+            + " with count="
+            + count
+            + ", dimensions="
+            + field.getVectorDimension()
+            + " ===");
     meta.writeInt(field.number);
     meta.writeInt(field.getVectorEncoding().ordinal());
     meta.writeInt(distFuncToOrd(field.getVectorSimilarityFunction()));
@@ -567,7 +575,9 @@ public class CuVSVectorsWriter extends KnnVectorsWriter {
     meta.writeVLong(vectorIndexLength);
     meta.writeVInt(field.getVectorDimension());
     meta.writeInt(count);
-    meta.writeVInt(24); // M);
+    int actualM = graph != null ? graph.maxConn() : 0;
+    System.out.println("=== writeMeta: Writing M=" + actualM + " (was hardcoded as 24) ===");
+    meta.writeVInt(actualM); // M);
     // write graph nodes on each level
     if (graph == null) {
       meta.writeVInt(0);
@@ -601,12 +611,24 @@ public class CuVSVectorsWriter extends KnnVectorsWriter {
           DirectMonotonicWriter.getInstance(
               meta, vectorIndex, valueCount, 16); // DIRECT_MONOTONIC_BLOCK_SHIFT);
       long cumulativeOffsetSum = 0;
+      int totalOffsetsWritten = 0;
       for (int[] levelOffsets : graphLevelNodeOffsets) {
+        System.out.println(
+            "=== writeMeta: Writing offsets for level with "
+                + levelOffsets.length
+                + " entries ===");
         for (int v : levelOffsets) {
           memoryOffsetsWriter.add(cumulativeOffsetSum);
           cumulativeOffsetSum += v;
+          totalOffsetsWritten++;
         }
       }
+      System.out.println(
+          "=== writeMeta: Total offsets written: "
+              + totalOffsetsWritten
+              + ", expected: "
+              + valueCount
+              + " ===");
       memoryOffsetsWriter.finish();
       meta.writeLong(vectorIndex.getFilePointer() - start);
     }
@@ -617,27 +639,45 @@ public class CuVSVectorsWriter extends KnnVectorsWriter {
     // write vectors' neighbours on each level into the vectorIndex file
     int countOnLevel0 = graph.size();
     int[][] offsets = new int[graph.numLevels()][];
+    int[] scratch = new int[graph.maxConn() * 2];
     for (int level = 0; level < graph.numLevels(); level++) {
       int[] sortedNodes = NodesIterator.getSortedNodes(graph.getNodesOnLevel(level));
       offsets[level] = new int[sortedNodes.length];
       int nodeOffsetId = 0;
+      // Debug: print the actual number of nodes being processed
+      System.out.println(
+          "=== writeGraph: Level "
+              + level
+              + " has "
+              + sortedNodes.length
+              + " nodes, expected "
+              + (level == 0 ? countOnLevel0 : "unknown")
+              + " ===");
       for (int node : sortedNodes) {
         NeighborArray neighbors = graph.getNeighbors(level, node);
         int size = neighbors.size();
         // Write size in VInt as the neighbors list is typically small
         long offsetStart = vectorIndex.getFilePointer();
-        vectorIndex.writeVInt(size);
-        // Destructively modify; it's ok we are discarding it after this
         int[] nnodes = neighbors.nodes();
         Arrays.sort(nnodes, 0, size);
         // Now that we have sorted, do delta encoding to minimize the required bits to store the
         // information
-        for (int i = size - 1; i > 0; --i) {
-          assert nnodes[i] < countOnLevel0 : "node too large: " + nnodes[i] + ">=" + countOnLevel0;
-          nnodes[i] -= nnodes[i - 1];
+        int actualSize = 0;
+        if (size > 0) {
+          scratch[0] = nnodes[0];
+          actualSize = 1;
         }
-        for (int i = 0; i < size; i++) {
-          vectorIndex.writeVInt(nnodes[i]);
+        for (int i = 1; i < size; i++) {
+          assert nnodes[i] < countOnLevel0 : "node too large: " + nnodes[i] + ">=" + countOnLevel0;
+          if (nnodes[i - 1] == nnodes[i]) {
+            continue;
+          }
+          scratch[actualSize++] = nnodes[i] - nnodes[i - 1];
+        }
+        // Write the size after duplicates are removed
+        vectorIndex.writeVInt(actualSize);
+        for (int i = 0; i < actualSize; i++) {
+          vectorIndex.writeVInt(scratch[i]);
         }
         offsets[level][nodeOffsetId++] =
             Math.toIntExact(vectorIndex.getFilePointer() - offsetStart);

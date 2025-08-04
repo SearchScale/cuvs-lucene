@@ -1,17 +1,22 @@
 import org.apache.lucene.codecs.Codec;
 import org.apache.lucene.codecs.lucene101.Lucene101Codec;
+import com.nvidia.cuvs.lucene.CuVSCodec;
 import org.apache.lucene.document.Document;
 import org.apache.lucene.index.DirectoryReader;
 import org.apache.lucene.index.FloatVectorValues;
 import org.apache.lucene.index.IndexReader;
 import org.apache.lucene.index.LeafReader;
 import org.apache.lucene.index.LeafReaderContext;
+import org.apache.lucene.index.SegmentCommitInfo;
+import org.apache.lucene.index.SegmentInfo;
+import org.apache.lucene.index.SegmentInfos;
 import org.apache.lucene.search.IndexSearcher;
 import org.apache.lucene.search.KnnFloatVectorQuery;
 import org.apache.lucene.search.ScoreDoc;
 import org.apache.lucene.search.TopDocs;
 import org.apache.lucene.store.Directory;
 import org.apache.lucene.store.FSDirectory;
+import org.apache.lucene.store.IOContext;
 
 import java.io.IOException;
 import java.nio.file.Paths;
@@ -22,10 +27,13 @@ public class TestIndexWithLucene101 {
     private static final Random random = new Random(42);
     
     public static void main(String[] args) throws IOException {
-        System.out.println("=== Testing Index with Lucene101 Codec ===");
+        System.out.println("=== Testing Index with CuVSCodec ===");
         
-        // Test 1: Try to open the index with Lucene101 codec
-        try (Directory dir = FSDirectory.open(Paths.get("myindex"))) {
+        // Register CuVSCodec
+        Codec.setDefault(new CuVSCodec());
+        
+        // Test 1: Try to open the index with CuVSCodec
+        try (Directory dir = FSDirectory.open(Paths.get("helloindex"))) {
             System.out.println("\n1. Opening index with DirectoryReader (no specific codec)...");
             try (DirectoryReader reader = DirectoryReader.open(dir)) {
                 System.out.println("✓ Successfully opened index");
@@ -82,6 +90,7 @@ public class TestIndexWithLucene101 {
             }
         } catch (Exception e) {
             System.out.println("✗ knn1 search failed: " + e.getMessage());
+            e.printStackTrace();
         }
         
         // Test search on knn2 field
@@ -98,6 +107,7 @@ public class TestIndexWithLucene101 {
             }
         } catch (Exception e) {
             System.out.println("✗ knn2 search failed: " + e.getMessage());
+            e.printStackTrace();
         }
     }
     
@@ -123,4 +133,5 @@ public class TestIndexWithLucene101 {
         }
         return v;
     }
+    
 }

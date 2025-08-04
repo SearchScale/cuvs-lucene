@@ -21,9 +21,11 @@ import com.nvidia.cuvs.lucene.CuVSVectorsWriter.IndexType;
 import java.io.IOException;
 import java.util.logging.Logger;
 import org.apache.lucene.codecs.KnnVectorsFormat;
+import org.apache.lucene.codecs.KnnVectorsReader;
 import org.apache.lucene.codecs.hnsw.DefaultFlatVectorScorer;
 import org.apache.lucene.codecs.hnsw.FlatVectorsFormat;
 import org.apache.lucene.codecs.lucene99.Lucene99FlatVectorsFormat;
+import org.apache.lucene.codecs.lucene99.Lucene99HnswVectorsReader;
 import org.apache.lucene.index.SegmentReadState;
 import org.apache.lucene.index.SegmentWriteState;
 
@@ -120,10 +122,11 @@ public class CuVSVectorsFormat extends KnnVectorsFormat {
   }
 
   @Override
-  public CuVSVectorsReader fieldsReader(SegmentReadState state) throws IOException {
-    checkSupported();
+  public KnnVectorsReader fieldsReader(SegmentReadState state) throws IOException {
+    // checkSupported();
     var flatReader = flatVectorsFormat.fieldsReader(state);
-    return new CuVSVectorsReader(state, resources, flatReader);
+    // return new CuVSVectorsReader(state, resources, flatReader);
+    return new Lucene99HnswVectorsReader(state, flatReader);
   }
 
   @Override

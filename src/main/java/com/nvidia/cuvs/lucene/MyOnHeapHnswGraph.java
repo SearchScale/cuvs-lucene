@@ -95,7 +95,14 @@ public class MyOnHeapHnswGraph extends HnswGraph {
         && neighbors[currentNode] != null) {
       neighborIndex++;
       if (neighborIndex < neighbors[currentNode].size()) {
-        return neighbors[currentNode].nodes()[neighborIndex];
+        int neighborNode = neighbors[currentNode].nodes()[neighborIndex];
+        // Add bounds check to prevent index out of bounds
+        if (neighborNode >= 0 && neighborNode < size) {
+          return neighborNode;
+        } else {
+          // Skip invalid neighbor and try next
+          return nextNeighbor();
+        }
       }
     }
     return NO_MORE_DOCS;
