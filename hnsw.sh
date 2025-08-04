@@ -1,5 +1,5 @@
-rm -rf myindex *.class
-export LD_LIBRARY_PATH=/home/ishan/code/cuvs/cpp/build
+rm -rf helloindex *.class
+export LD_LIBRARY_PATH=/home/searchscale/code/cuvs-api/cuvs/cpp/build
 
 mvn -DskipTests=true clean compile package
 
