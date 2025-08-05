@@ -30,7 +30,7 @@ public class TestIndexWithLucene101 {
         System.out.println("=== Testing Index with CuVSCodec ===");
         
         // Register CuVSCodec
-        Codec.setDefault(new CuVSCodec());
+        Codec.setDefault(new CuVSCodec(true));
         
         // Test 1: Try to open the index with CuVSCodec
         try (Directory dir = FSDirectory.open(Paths.get("helloindex"))) {
