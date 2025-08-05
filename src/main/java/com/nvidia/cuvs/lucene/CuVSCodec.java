@@ -26,16 +26,11 @@ import org.apache.lucene.codecs.lucene101.Lucene101Codec;
 /** CuVS based codec for GPU based vector search */
 public class CuVSCodec extends FilterCodec {
 
-  public CuVSCodec() {
-    this("CuVSCodec", new Lucene101Codec());
-  }
-
   boolean nativeOnly = false;
 
-  public CuVSCodec(boolean nativeOnly) {
-    super("CuVSCodec", new Lucene101Codec());
-    this.nativeOnly = nativeOnly;
-    initializeFormat();
+  public CuVSCodec() {
+    this("CuVSCodec", new Lucene101Codec());
+    nativeOnly = Boolean.getBoolean("CUVS_CPU_SEARCH");
   }
 
   public CuVSCodec(String name, Codec delegate) {

@@ -41,7 +41,7 @@ public class NativeHNSWSerialization {
 
   public static void main(String[] args) throws IOException {
 
-    Codec codec = new CuVSCodec(true);
+    Codec codec = new CuVSCodec();
     IndexWriterConfig config =
         new IndexWriterConfig()
             .setCodec(codec)

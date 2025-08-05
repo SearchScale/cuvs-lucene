@@ -124,18 +124,14 @@ public class CuVSVectorsFormat extends KnnVectorsFormat {
   @Override
   public KnnVectorsReader fieldsReader(SegmentReadState state) throws IOException {
     var flatReader = flatVectorsFormat.fieldsReader(state);
-    /* if (this.indexType == IndexType.HNSW_LUCENE) {
+    if (this.indexType == IndexType.HNSW_LUCENE) {
+      System.out.println("Using Reader: Lucene99HnswVectorsReader");
       return new Lucene99HnswVectorsReader(state, flatReader);
     } else {
       checkSupported();
+      System.out.println("Using Reader: CuVSVectorsReader");
       return new CuVSVectorsReader(state, resources, flatReader);
-    } */
-    /*
-     * TODO: The above block is failing because the indexType value is wrong
-     * even though nativeOnly parameter in CuVSCode is set to true. Need to check.
-     * Once fixed remove the line below and uncomment the above.
-     */
-    return new Lucene99HnswVectorsReader(state, flatReader);
+    }
   }
 
   @Override
