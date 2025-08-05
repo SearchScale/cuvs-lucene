@@ -20,7 +20,7 @@ import java.nio.file.Paths;
 import java.util.List;
 import java.util.Random;
 import org.apache.lucene.codecs.Codec;
-import com.nvidia.cuvs.lucene.CuVSCodec;
+import com.nvidia.cuvs.lucene.CuVSCPUSearchCodec;
 import org.apache.lucene.document.Document;
 import org.apache.lucene.document.Field;
 import org.apache.lucene.document.KnnFloatVectorField;
@@ -41,7 +41,7 @@ public class NativeHNSWSerialization {
 
   public static void main(String[] args) throws IOException {
 
-    Codec codec = new CuVSCodec();
+    Codec codec = new CuVSCPUSearchCodec();
     IndexWriterConfig config =
         new IndexWriterConfig()
             .setCodec(codec)

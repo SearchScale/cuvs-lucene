@@ -1,6 +1,5 @@
 import org.apache.lucene.codecs.Codec;
 import org.apache.lucene.codecs.lucene101.Lucene101Codec;
-import com.nvidia.cuvs.lucene.CuVSCodec;
 import org.apache.lucene.document.Document;
 import org.apache.lucene.index.DirectoryReader;
 import org.apache.lucene.index.FloatVectorValues;
@@ -27,12 +26,8 @@ public class TestIndexWithLucene101 {
     private static final Random random = new Random(42);
     
     public static void main(String[] args) throws IOException {
-        System.out.println("=== Testing Index with CuVSCodec ===");
         
-        // Register CuVSCodec
-        System.setProperty("CUVS_CPU_SEARCH", "true");
-        
-        // Test 1: Try to open the index with CuVSCodec
+        // Test 1: Try to open the index with CuVSCPUSearchCodec
         try (Directory dir = FSDirectory.open(Paths.get("helloindex"))) {
             System.out.println("\n1. Opening index with DirectoryReader (no specific codec)...");
             try (DirectoryReader reader = DirectoryReader.open(dir)) {
