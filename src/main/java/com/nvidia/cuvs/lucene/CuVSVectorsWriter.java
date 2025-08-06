@@ -380,7 +380,11 @@ public class CuVSVectorsWriter extends KnnVectorsWriter {
     // Get the adjacency list from CAGRA index
     int[][] adjacencyList;
     try {
-      adjacencyList = index.getGraph();
+      CuVSMatrix graphMatrix = index.getGraph();
+      int size = (int) graphMatrix.size();
+      int columns = (int) graphMatrix.columns();
+      adjacencyList = new int[size][columns];
+      graphMatrix.toArray(adjacencyList);
       System.out.println("=== SUCCESS: Got adjacency list from CAGRA index ===");
       info("Successfully got adjacency list from CAGRA index");
     } catch (Exception e) {
@@ -468,7 +472,11 @@ public class CuVSVectorsWriter extends KnnVectorsWriter {
     // Get the adjacency list from CAGRA index
     int[][] adjacencyList;
     try {
-      adjacencyList = index.getGraph();
+      CuVSMatrix graphMatrix = index.getGraph();
+      int size = (int) graphMatrix.size();
+      int columns = (int) graphMatrix.columns();
+      adjacencyList = new int[size][columns];
+      graphMatrix.toArray(adjacencyList);
       System.out.println("=== SUCCESS: Got adjacency list from CAGRA index ===");
       info("Successfully got adjacency list from CAGRA index");
     } catch (Exception e) {
