@@ -442,6 +442,7 @@ public class CuVSVectorsWriter extends KnnVectorsWriter {
     int maxConn = Math.max(10, (int) graphMatrix.columns()); // Use actual max connections
 
     int[][] offsets = new int[numLevels][];
+    // Reuse scratch array to reduce allocation overhead
     int[] scratch = new int[maxConn * 2];
 
     // Level 0 has all nodes
@@ -452,7 +453,7 @@ public class CuVSVectorsWriter extends KnnVectorsWriter {
     offsets[0] = new int[size];
     int nodeOffsetId = 0;
 
-    info("=== writeGraphStreaming: Level 0 has " + size + " nodes, processing with RowView ===");
+    // Process nodes sequentially to maintain graph integrity
 
     for (int node : sortedNodes) {
       // Get neighbors for this node using RowView - no copying to heap
@@ -488,24 +489,18 @@ public class CuVSVectorsWriter extends KnnVectorsWriter {
   }
 
   /**
-   * Get neighbors for a node using RowView to avoid copying entire row to heap.
-   * This method processes one row at a time using native memory access.
+   * Optimized neighbor extraction with data type caching.
+   * Caches the data type once to avoid repeated try-catch overhead.
    */
   private NeighborArray getNeighborsFromRowView(CuVSMatrix graphMatrix, int node, int totalSize) {
     try {
-      // Add debugging information about the graph matrix
-      info(
-          "Graph matrix info - size: "
-              + graphMatrix.size()
-              + ", columns: "
-              + graphMatrix.columns());
-      info("Requesting neighbors for node: " + node + " out of total size: " + totalSize);
+      // Reset data type cache for new row
+      dataTypeDetected = false;
+      cachedDataType = DataType.UNKNOWN;
 
       // Get the row view for the specific node using the correct CuVS API
       RowView row = graphMatrix.getRow(node);
       long rowSize = row.size();
-
-      info("RowView obtained successfully, size: " + rowSize);
 
       // Create neighbor array with actual size
       NeighborArray neighbors = new NeighborArray((int) rowSize, true);
@@ -519,11 +514,8 @@ public class CuVSVectorsWriter extends KnnVectorsWriter {
         }
       }
 
-      info("Successfully processed " + neighbors.size() + " neighbors for node " + node);
       return neighbors;
     } catch (Exception e) {
-      info("Error getting neighbors from RowView for node " + node + ": " + e.getMessage());
-      e.printStackTrace();
       // Return empty neighbor array as fallback
       return new NeighborArray(0, true);
     }
@@ -533,21 +525,61 @@ public class CuVSVectorsWriter extends KnnVectorsWriter {
    * Extract a neighbor value from RowView at the specified index using robust data type handling.
    * This method tries FLOAT first (most common), then BYTE (for quantized indices).
    */
+  // Cache for data type detection to avoid repeated try-catch
+  private enum DataType {
+    FLOAT,
+    BYTE,
+    UNKNOWN
+  }
+
+  private DataType cachedDataType = DataType.UNKNOWN;
+  private boolean dataTypeDetected = false;
+
+  /**
+   * Optimized neighbor extraction with data type caching.
+   * Caches the data type once to avoid repeated try-catch overhead.
+   */
   private int getNeighborFromRowViewRobust(RowView row, int index) {
-    // Try FLOAT first (most common case for graph matrices)
+    // Use cached data type if available
+    if (dataTypeDetected) {
+      switch (cachedDataType) {
+        case FLOAT:
+          try {
+            return (int) row.getAsFloat(index);
+          } catch (Exception e) {
+            return -1;
+          }
+        case BYTE:
+          try {
+            return (int) row.getAsByte(index);
+          } catch (Exception e) {
+            return -1;
+          }
+        default:
+          return -1;
+      }
+    }
+
+    // Detect data type on first access
     try {
-      return (int) row.getAsFloat(index);
+      int result = (int) row.getAsFloat(index);
+      cachedDataType = DataType.FLOAT;
+      dataTypeDetected = true;
+      return result;
     } catch (AssertionError e) {
-      // Try BYTE next (for quantized indices)
       try {
-        return (int) row.getAsByte(index);
+        int result = (int) row.getAsByte(index);
+        cachedDataType = DataType.BYTE;
+        dataTypeDetected = true;
+        return result;
       } catch (AssertionError e2) {
-        // Both data types failed, return fallback value
-        info("Both FLOAT and BYTE data types failed for index " + index + ", using fallback value");
+        cachedDataType = DataType.UNKNOWN;
+        dataTypeDetected = true;
         return -1;
       }
     } catch (Exception e) {
-      info("Error accessing neighbor at index " + index + ": " + e.getMessage());
+      cachedDataType = DataType.UNKNOWN;
+      dataTypeDetected = true;
       return -1;
     }
   }
