@@ -488,67 +488,67 @@ public class CuVSVectorsWriter extends KnnVectorsWriter {
   }
 
   /**
-   * Get neighbors for a node directly from CuVSMatrix using RowView without copying to heap.
-   * This method processes one row at a time and converts the native data to NeighborArray.
+   * Get neighbors for a node using RowView to avoid copying entire row to heap.
+   * This method processes one row at a time using native memory access.
    */
   private NeighborArray getNeighborsFromRowView(CuVSMatrix graphMatrix, int node, int totalSize) {
-    if (graphMatrix == null) {
-      info("Graph matrix is null, creating fallback neighbors for node " + node);
-      return createFallbackNeighbors(node, totalSize);
-    }
-
     try {
-      // Get the row for this node from the graph matrix using RowView
+      // Add debugging information about the graph matrix
+      info(
+          "Graph matrix info - size: "
+              + graphMatrix.size()
+              + ", columns: "
+              + graphMatrix.columns());
+      info("Requesting neighbors for node: " + node + " out of total size: " + totalSize);
+
+      // Get the row view for the specific node using the correct CuVS API
       RowView row = graphMatrix.getRow(node);
-      int neighborCount = (int) row.size();
+      long rowSize = row.size();
 
-      info("Processing node " + node + " with " + neighborCount + " neighbors using RowView");
+      info("RowView obtained successfully, size: " + rowSize);
 
-      // Create a neighbor array with the appropriate size
-      NeighborArray neighbors = new NeighborArray(neighborCount, true);
+      // Create neighbor array with actual size
+      NeighborArray neighbors = new NeighborArray((int) rowSize, true);
 
-      // Process each neighbor in the row without copying the entire row
-      for (int i = 0; i < neighborCount; i++) {
-        try {
-          // Access individual elements from RowView
-          int neighbor = getNeighborFromRowView(row, i);
-          float score = 1.0f - (i * 0.001f); // Placeholder score
-
-          if (neighbor >= 0 && neighbor < totalSize) {
-            neighbors.addInOrder(neighbor, score);
-          }
-        } catch (Exception e) {
-          info("Error accessing neighbor " + i + " for node " + node + ": " + e.getMessage());
-          // Skip this neighbor and continue
+      // Process each neighbor in the row using robust data type handling
+      for (int i = 0; i < rowSize; i++) {
+        int neighbor = getNeighborFromRowViewRobust(row, i);
+        if (neighbor >= 0 && neighbor < totalSize) {
+          // Add neighbor with a score (1.0f - i * 0.001f for ordering)
+          neighbors.addInOrder(neighbor, 1.0f - (i * 0.001f));
         }
       }
 
+      info("Successfully processed " + neighbors.size() + " neighbors for node " + node);
       return neighbors;
-
     } catch (Exception e) {
-      info("Error reading row for node " + node + ": " + e.getMessage());
-      // Fallback to simple neighbors if there's an error reading from the matrix
-      return createFallbackNeighbors(node, totalSize);
+      info("Error getting neighbors from RowView for node " + node + ": " + e.getMessage());
+      e.printStackTrace();
+      // Return empty neighbor array as fallback
+      return new NeighborArray(0, true);
     }
   }
 
   /**
-   * Extract a neighbor value from RowView at the specified index.
-   * This method handles the native data access without copying the entire row.
+   * Extract a neighbor value from RowView at the specified index using robust data type handling.
+   * This method tries FLOAT first (most common), then BYTE (for quantized indices).
    */
-  private int getNeighborFromRowView(RowView row, int index) {
+  private int getNeighborFromRowViewRobust(RowView row, int index) {
+    // Try FLOAT first (most common case for graph matrices)
     try {
-      // Since we don't know the exact RowView API, we'll use a simple fallback approach
-      // This is a placeholder implementation that should be replaced with actual RowView API calls
-
-      // For now, return the index as a fallback neighbor
-      // In a real implementation, you would use the actual RowView API methods
-      return index;
-
+      return (int) row.getAsFloat(index);
+    } catch (AssertionError e) {
+      // Try BYTE next (for quantized indices)
+      try {
+        return (int) row.getAsByte(index);
+      } catch (AssertionError e2) {
+        // Both data types failed, return fallback value
+        info("Both FLOAT and BYTE data types failed for index " + index + ", using fallback value");
+        return -1;
+      }
     } catch (Exception e) {
       info("Error accessing neighbor at index " + index + ": " + e.getMessage());
-      // Return a fallback value
-      return index;
+      return -1;
     }
   }
 
