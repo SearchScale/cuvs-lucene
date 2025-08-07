@@ -26,6 +26,7 @@ import org.apache.lucene.codecs.hnsw.DefaultFlatVectorScorer;
 import org.apache.lucene.codecs.hnsw.FlatVectorsFormat;
 import org.apache.lucene.codecs.lucene99.Lucene99FlatVectorsFormat;
 import org.apache.lucene.codecs.lucene99.Lucene99HnswVectorsReader;
+import org.apache.lucene.index.IndexFileNames;
 import org.apache.lucene.index.SegmentReadState;
 import org.apache.lucene.index.SegmentWriteState;
 
@@ -104,6 +105,13 @@ public class CuVSVectorsFormat extends KnnVectorsFormat {
 
   /** Tells whether the platform supports cuvs. */
   public static boolean supported() {
+    if (resources == null) {
+      try {
+        resources = CuVSResources.create();
+      } catch (Throwable t) {
+        return false;
+      }
+    }
     return resources != null;
   }
 
@@ -124,13 +132,29 @@ public class CuVSVectorsFormat extends KnnVectorsFormat {
   @Override
   public KnnVectorsReader fieldsReader(SegmentReadState state) throws IOException {
     var flatReader = flatVectorsFormat.fieldsReader(state);
-    if (this.indexType == IndexType.HNSW_LUCENE) {
-      System.out.println("Using Reader: Lucene99HnswVectorsReader");
-      return new Lucene99HnswVectorsReader(state, flatReader);
-    } else {
+
+    String vemcFileName =
+        IndexFileNames.segmentFileName(state.segmentInfo.name, state.segmentSuffix, "vemc");
+    String vcagFileName =
+        IndexFileNames.segmentFileName(state.segmentInfo.name, state.segmentSuffix, "vcag");
+
+    boolean hasCuVSFiles = false;
+    try {
+      String[] files = state.directory.listAll();
+      hasCuVSFiles =
+          java.util.Arrays.asList(files).contains(vemcFileName)
+              && java.util.Arrays.asList(files).contains(vcagFileName);
+    } catch (Exception e) {
+      hasCuVSFiles = false;
+    }
+
+    if (hasCuVSFiles) {
       checkSupported();
-      System.out.println("Using Reader: CuVSVectorsReader");
+      System.out.println("Using Reader: CuVSVectorsReader (detected .vemc/.vcag files)");
       return new CuVSVectorsReader(state, resources, flatReader);
+    } else {
+      System.out.println("Using Reader: Lucene99HnswVectorsReader (no .vemc/.vcag files found)");
+      return new Lucene99HnswVectorsReader(state, flatReader);
     }
   }
 

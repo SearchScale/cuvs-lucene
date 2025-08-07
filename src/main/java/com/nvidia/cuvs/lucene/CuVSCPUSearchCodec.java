@@ -15,13 +15,13 @@
  */
 package com.nvidia.cuvs.lucene;
 
-import com.nvidia.cuvs.LibraryException;
 import com.nvidia.cuvs.lucene.CuVSVectorsWriter.IndexType;
 import java.util.logging.Logger;
 import org.apache.lucene.codecs.Codec;
 import org.apache.lucene.codecs.FilterCodec;
 import org.apache.lucene.codecs.KnnVectorsFormat;
 import org.apache.lucene.codecs.lucene101.Lucene101Codec;
+import org.apache.lucene.codecs.lucene99.Lucene99HnswVectorsFormat;
 
 /** CuVS based codec for GPU based vector search */
 public class CuVSCPUSearchCodec extends FilterCodec {
@@ -38,11 +38,24 @@ public class CuVSCPUSearchCodec extends FilterCodec {
   private void initializeFormat() {
     KnnVectorsFormat format;
     try {
-      format = new CuVSVectorsFormat(1, 128, 64, IndexType.HNSW_LUCENE);
-      setKnnFormat(format);
-    } catch (LibraryException ex) {
+      if (CuVSVectorsFormat.supported()) {
+        format = new CuVSVectorsFormat(1, 128, 64, IndexType.HNSW_LUCENE);
+        setKnnFormat(format);
+      } else {
+        throw new UnsupportedOperationException("CuVS not supported on this platform");
+      }
+    } catch (Exception ex) {
       Logger log = Logger.getLogger(CuVSCodec.class.getName());
-      log.severe("Couldn't load native library, possible classloader issue. " + ex.getMessage());
+      log.warning(
+          "Couldn't load CuVS library, falling back to Lucene HNSW format. " + ex.getMessage());
+
+      try {
+        format = new Lucene99HnswVectorsFormat(16, 100);
+        setKnnFormat(format);
+      } catch (Exception fallbackEx) {
+        log.severe("Failed to create fallback HNSW format: " + fallbackEx.getMessage());
+        setKnnFormat(null);
+      }
     }
   }
 
