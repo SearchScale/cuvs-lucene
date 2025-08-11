@@ -47,9 +47,9 @@ import org.junit.BeforeClass;
 import org.junit.Test;
 
 @SuppressSysoutChecks(bugUrl = "prints info from within cuvs")
-public class TestCuVSAlternating extends LuceneTestCase {
+public class TestCuVSGaps extends LuceneTestCase {
 
-  protected static Logger log = Logger.getLogger(TestCuVSAlternating.class.getName());
+  protected static Logger log = Logger.getLogger(TestCuVSGaps.class.getName());
 
   static final Codec codec = TestUtil.alwaysKnnVectorsFormat(new CuVSVectorsFormat());
   static IndexSearcher searcher;
