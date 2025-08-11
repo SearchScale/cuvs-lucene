@@ -17,6 +17,7 @@ package com.nvidia.cuvs.lucene;
 
 import static org.apache.lucene.index.VectorSimilarityFunction.EUCLIDEAN;
 
+import java.io.File;
 import java.io.IOException;
 import java.nio.file.Path;
 import java.nio.file.Paths;
@@ -58,8 +59,8 @@ public class TestCagraToHnswSerializationAndSearch extends LuceneTestCase {
 
   @BeforeClass
   public static void beforeClass() throws Exception {
-    assumeTrue("cuvs not supported", CuVSVectorsFormat.supported());
-    random = random();
+    assumeTrue("cuVS not supported", CuVSVectorsFormat.supported());
+    random = new Random();
     indexDirPath = Paths.get(UUID.randomUUID().toString());
   }
 
@@ -78,38 +79,42 @@ public class TestCagraToHnswSerializationAndSearch extends LuceneTestCase {
     float[][] dataset = generateDataset(random, numDocs, dimension);
 
     // Indexing
-    try (Directory dir = FSDirectory.open(indexDirPath);
-        IndexWriter w = new IndexWriter(dir, config)) {
+    try (Directory indexDirectory = FSDirectory.open(indexDirPath);
+        IndexWriter indexWriter = new IndexWriter(indexDirectory, config)) {
       for (int i = 0; i < numDocs; i++) {
-        Document doc = new Document();
-        doc.add(new StringField("id", Integer.toString(i), Field.Store.YES));
-        doc.add(new KnnFloatVectorField(VECTOR_FIELD, dataset[i], EUCLIDEAN));
-        w.addDocument(doc);
+        Document document = new Document();
+        document.add(new StringField("id", Integer.toString(i), Field.Store.YES));
+        document.add(new KnnFloatVectorField(VECTOR_FIELD, dataset[i], EUCLIDEAN));
+        indexWriter.addDocument(document);
         count -= 1;
         if (count == 0) {
-          w.commit();
+          indexWriter.commit();
           count = COMMIT_FREQ;
         }
       }
     }
 
     // Searching
-    try (Directory dir = FSDirectory.open(indexDirPath)) {
-      try (DirectoryReader reader = DirectoryReader.open(dir)) {
+    try (Directory indexDirectory = FSDirectory.open(indexDirPath)) {
+      try (DirectoryReader reader = DirectoryReader.open(indexDirectory)) {
         log.info("Successfully opened index");
 
-        for (LeafReaderContext sr : reader.leaves()) {
-          LeafReader lr = sr.reader();
-          FloatVectorValues knn1Values = lr.getFloatVectorValues("knn1");
-          if (knn1Values != null) {
-            log.info(
-                "knn1 field: "
-                    + knn1Values.size()
-                    + " vectors, "
-                    + knn1Values.dimension()
-                    + " dimensions");
-          }
+        int vectorCount = 0;
+        for (LeafReaderContext leafReaderContext : reader.leaves()) {
+          LeafReader leafReader = leafReaderContext.reader();
+          FloatVectorValues knnValues = leafReader.getFloatVectorValues("knn1");
+          assertNotNull(knnValues);
+          log.info(
+              VECTOR_FIELD
+                  + " field: "
+                  + knnValues.size()
+                  + " vectors, "
+                  + knnValues.dimension()
+                  + " dimensions");
+          vectorCount += knnValues.size();
+          assertTrue("Vector dimension mismatch", knnValues.dimension() == dimension);
         }
+        assertTrue("Dataset size mismatch", vectorCount == numDocs);
 
         log.info("\n2. Testing vector search queries...");
         IndexSearcher searcher = new IndexSearcher(reader);
@@ -136,7 +141,7 @@ public class TestCagraToHnswSerializationAndSearch extends LuceneTestCase {
         }
 
         assertTrue("TopK results not returned", results.scoreDocs.length == topK);
-        // TODO: make this test a bit more meaningful.
+        // TODO: make this test a bit more meaningful like checking the quality of search results.
 
       } catch (Exception e) {
         e.printStackTrace();
@@ -146,7 +151,10 @@ public class TestCagraToHnswSerializationAndSearch extends LuceneTestCase {
 
   @AfterClass
   public static void afterClass() throws Exception {
-    FileUtils.deleteDirectory(indexDirPath.toFile());
+    File indexDirPathFile = indexDirPath.toFile();
+    if (indexDirPathFile.exists() && indexDirPathFile.isDirectory()) {
+      FileUtils.deleteDirectory(indexDirPathFile);
+    }
   }
 
   private static float[][] generateDataset(Random random, int datasetSize, int dimensions) {
