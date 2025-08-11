@@ -67,7 +67,7 @@
     <dependency>
       <groupId>com.nvidia.cuvs</groupId>
       <artifactId>cuvs-java</artifactId>
-      <version>25.10.0-lorenzo-cagra-read-graph-SNAPSHOT</version>
+      <version>25.10.0-lorenzo-9362a-SNAPSHOT</version>
     </dependency>
   </dependencies>
 

@@ -39,7 +39,8 @@ public class CuVSCPUSearchCodec extends FilterCodec {
     KnnVectorsFormat format;
     try {
       if (CuVSVectorsFormat.supported()) {
-        format = new CuVSVectorsFormat(1, 128, 64, IndexType.HNSW_LUCENE);
+        // Increase writer threads and graph degrees to improve recall
+        format = new CuVSVectorsFormat(32, 256, 128, IndexType.HNSW_LUCENE);
         setKnnFormat(format);
       } else {
         throw new UnsupportedOperationException("CuVS not supported on this platform");
@@ -47,14 +48,27 @@ public class CuVSCPUSearchCodec extends FilterCodec {
     } catch (Exception ex) {
       Logger log = Logger.getLogger(CuVSCodec.class.getName());
       log.warning(
-          "Couldn't load CuVS library, falling back to Lucene HNSW format. " + ex.getMessage());
+          "CuVS library initialization issue (but may still work): "
+              + ex.getMessage()
+              + ". Attempting to use CuVS anyway...");
 
       try {
-        format = new Lucene99HnswVectorsFormat(16, 100);
+        // Try to use CuVS even if supported() returned false
+        format = new CuVSVectorsFormat(32, 256, 128, IndexType.HNSW_LUCENE);
         setKnnFormat(format);
-      } catch (Exception fallbackEx) {
-        log.severe("Failed to create fallback HNSW format: " + fallbackEx.getMessage());
-        setKnnFormat(null);
+        log.info("CuVS format created successfully despite initialization warning");
+      } catch (Exception cuvsEx) {
+        log.warning(
+            "CuVS format creation failed, falling back to Lucene HNSW format: "
+                + cuvsEx.getMessage());
+        try {
+          // Fall back with stronger HNSW params to improve recall
+          format = new Lucene99HnswVectorsFormat(32, 200);
+          setKnnFormat(format);
+        } catch (Exception fallbackEx) {
+          log.severe("Failed to create fallback HNSW format: " + fallbackEx.getMessage());
+          setKnnFormat(null);
+        }
       }
     }
   }
