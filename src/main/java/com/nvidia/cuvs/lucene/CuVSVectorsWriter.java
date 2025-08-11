@@ -454,7 +454,6 @@ public class CuVSVectorsWriter extends KnnVectorsWriter {
     int nodeOffsetId = 0;
 
     // Process nodes sequentially to maintain graph integrity
-
     for (int node : sortedNodes) {
       // Get neighbors for this node using RowView - no copying to heap
       NeighborArray neighbors = getNeighborsFromRowView(graphMatrix, node, size);
@@ -523,10 +522,11 @@ public class CuVSVectorsWriter extends KnnVectorsWriter {
 
   /**
    * Extract a neighbor value from RowView at the specified index using robust data type handling.
-   * This method tries FLOAT first (most common), then BYTE (for quantized indices).
+   * This method tries INT first (most common for CAGRA graphs), then FLOAT, then BYTE.
    */
   // Cache for data type detection to avoid repeated try-catch
   private enum DataType {
+    INT,
     FLOAT,
     BYTE,
     UNKNOWN
@@ -543,6 +543,12 @@ public class CuVSVectorsWriter extends KnnVectorsWriter {
     // Use cached data type if available
     if (dataTypeDetected) {
       switch (cachedDataType) {
+        case INT:
+          try {
+            return row.getAsInt(index);
+          } catch (Exception e) {
+            return -1;
+          }
         case FLOAT:
           try {
             return (int) row.getAsFloat(index);
@@ -560,27 +566,30 @@ public class CuVSVectorsWriter extends KnnVectorsWriter {
       }
     }
 
-    // Detect data type on first access
+    // Detect data type on first access - try INT first (most common for CAGRA graphs)
     try {
-      int result = (int) row.getAsFloat(index);
-      cachedDataType = DataType.FLOAT;
+      int result = row.getAsInt(index);
+      cachedDataType = DataType.INT;
       dataTypeDetected = true;
       return result;
-    } catch (AssertionError e) {
+    } catch (Exception e) {
       try {
-        int result = (int) row.getAsByte(index);
-        cachedDataType = DataType.BYTE;
+        int result = (int) row.getAsFloat(index);
+        cachedDataType = DataType.FLOAT;
         dataTypeDetected = true;
         return result;
-      } catch (AssertionError e2) {
-        cachedDataType = DataType.UNKNOWN;
-        dataTypeDetected = true;
-        return -1;
+      } catch (Exception e2) {
+        try {
+          int result = (int) row.getAsByte(index);
+          cachedDataType = DataType.BYTE;
+          dataTypeDetected = true;
+          return result;
+        } catch (Exception e3) {
+          cachedDataType = DataType.UNKNOWN;
+          dataTypeDetected = true;
+          return -1;
+        }
       }
-    } catch (Exception e) {
-      cachedDataType = DataType.UNKNOWN;
-      dataTypeDetected = true;
-      return -1;
     }
   }
 

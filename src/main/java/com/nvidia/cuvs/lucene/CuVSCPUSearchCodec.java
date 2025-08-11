@@ -39,8 +39,8 @@ public class CuVSCPUSearchCodec extends FilterCodec {
     KnnVectorsFormat format;
     try {
       if (CuVSVectorsFormat.supported()) {
-        // Increase writer threads and graph degrees to improve recall
-        format = new CuVSVectorsFormat(32, 256, 128, IndexType.HNSW_LUCENE);
+        // Use HNSW_LUCENE mode for GPU indexing + CPU search (need to fix conversion)
+        format = new CuVSVectorsFormat(32, 128, 64, IndexType.HNSW_LUCENE);
         setKnnFormat(format);
       } else {
         throw new UnsupportedOperationException("CuVS not supported on this platform");
@@ -54,7 +54,7 @@ public class CuVSCPUSearchCodec extends FilterCodec {
 
       try {
         // Try to use CuVS even if supported() returned false
-        format = new CuVSVectorsFormat(32, 256, 128, IndexType.HNSW_LUCENE);
+        format = new CuVSVectorsFormat(32, 128, 64, IndexType.HNSW_LUCENE);
         setKnnFormat(format);
         log.info("CuVS format created successfully despite initialization warning");
       } catch (Exception cuvsEx) {
