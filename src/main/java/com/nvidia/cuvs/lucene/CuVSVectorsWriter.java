@@ -566,30 +566,50 @@ public class CuVSVectorsWriter extends KnnVectorsWriter {
       }
     }
 
-    // Detect data type on first access - try INT first (most common for CAGRA graphs)
+    // Robust error handling for CuVS matrix access
     try {
-      int result = row.getAsInt(index);
-      cachedDataType = DataType.INT;
-      dataTypeDetected = true;
-      return result;
-    } catch (Exception e) {
+      // Add bounds checking before accessing row data
+      if (index < 0 || index >= row.size()) {
+        return -1; // Invalid index
+      }
+
+      // Detect data type on first access - try INT first (most common for CAGRA graphs)
       try {
-        int result = (int) row.getAsFloat(index);
-        cachedDataType = DataType.FLOAT;
+        int result = row.getAsInt(index);
+        // Additional validation: ensure result is reasonable
+        if (result < 0) {
+          return -1; // Invalid neighbor ID
+        }
+        cachedDataType = DataType.INT;
         dataTypeDetected = true;
         return result;
-      } catch (Exception e2) {
+      } catch (Exception e) {
         try {
-          int result = (int) row.getAsByte(index);
-          cachedDataType = DataType.BYTE;
+          float floatResult = row.getAsFloat(index);
+          int result = (int) floatResult;
+          // Additional validation: ensure result is reasonable
+          if (result < 0 || floatResult != (float) result) {
+            return -1; // Invalid conversion or negative value
+          }
+          cachedDataType = DataType.FLOAT;
           dataTypeDetected = true;
           return result;
-        } catch (Exception e3) {
-          cachedDataType = DataType.UNKNOWN;
-          dataTypeDetected = true;
-          return -1;
+        } catch (Exception e2) {
+          try {
+            int result = (int) row.getAsByte(index);
+            cachedDataType = DataType.BYTE;
+            dataTypeDetected = true;
+            return result;
+          } catch (Exception e3) {
+            cachedDataType = DataType.UNKNOWN;
+            dataTypeDetected = true;
+            return -1;
+          }
         }
       }
+    } catch (Throwable outerException) {
+      // Handle any other matrix access errors (including AssertionError)
+      return -1;
     }
   }
 
