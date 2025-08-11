@@ -15,6 +15,9 @@
  */
 package com.nvidia.cuvs.lucene;
 
+import static com.nvidia.cuvs.lucene.TestUtils.generateDataset;
+import static com.nvidia.cuvs.lucene.TestUtils.generateRandomVector;
+
 import java.io.IOException;
 import java.util.ArrayList;
 import java.util.HashSet;
@@ -45,6 +48,7 @@ import org.apache.lucene.tests.index.RandomIndexWriter;
 import org.apache.lucene.tests.util.LuceneTestCase;
 import org.apache.lucene.tests.util.LuceneTestCase.SuppressSysoutChecks;
 import org.apache.lucene.tests.util.TestUtil;
+import org.junit.BeforeClass;
 import org.junit.Test;
 
 @SuppressSysoutChecks(bugUrl = "prints info from within cuvs")
@@ -53,13 +57,18 @@ public class TestCuVSDeletedDocuments extends LuceneTestCase {
   protected static Logger log = Logger.getLogger(TestCuVSDeletedDocuments.class.getName());
 
   static final Codec codec = TestUtil.alwaysKnnVectorsFormat(new CuVSVectorsFormat());
+  private static Random random;
+
+  @BeforeClass
+  public static void beforeClass() throws Exception {
+    assumeTrue("cuvs not supported", CuVSVectorsFormat.supported());
+    random = random();
+  }
 
   @Test
   public void testVectorSearchWithDeletedDocuments() throws IOException {
-    assumeTrue("cuvs not supported", CuVSVectorsFormat.supported());
 
     try (Directory directory = newDirectory()) {
-      Random random = random();
       int datasetSize = random.nextInt(200) + 50; // 50-250 documents
       int dimensions = random.nextInt(256) + 64; // 64-320 dimensions
       int topK = Math.min(random.nextInt(20) + 5, datasetSize / 2); // 5-25 results
@@ -124,10 +133,8 @@ public class TestCuVSDeletedDocuments extends LuceneTestCase {
 
   @Test
   public void testVectorSearchWithMixedDeletedAndMissingVectors() throws IOException {
-    assumeTrue("cuvs not supported", CuVSVectorsFormat.supported());
 
     try (Directory directory = newDirectory()) {
-      Random random = random();
       int datasetSize = random.nextInt(200) + 50; // 50-250 documents
       int dimensions = random.nextInt(256) + 64; // 64-320 dimensions
       int topK = Math.min(random.nextInt(20) + 5, datasetSize / 2); // 5-25 results
@@ -204,10 +211,8 @@ public class TestCuVSDeletedDocuments extends LuceneTestCase {
 
   @Test
   public void testVectorSearchAfterAllDocumentsDeleted() throws IOException {
-    assumeTrue("cuvs not supported", CuVSVectorsFormat.supported());
 
     try (Directory directory = newDirectory()) {
-      Random random = random();
       int datasetSize = random.nextInt(20) + 5; // 5-25 documents for this test
       int dimensions = random.nextInt(128) + 32; // 32-160 dimensions
       int topK = Math.min(random.nextInt(10) + 5, datasetSize); // 5-15 results
@@ -251,10 +256,8 @@ public class TestCuVSDeletedDocuments extends LuceneTestCase {
 
   @Test
   public void testVectorSearchWithPartialDeletionAndReindexing() throws IOException {
-    assumeTrue("cuvs not supported", CuVSVectorsFormat.supported());
 
     try (Directory directory = newDirectory()) {
-      Random random = random();
       int datasetSize = random.nextInt(200) + 50; // 50-250 documents
       int dimensions = random.nextInt(256) + 64; // 64-320 dimensions
       int topK = Math.min(random.nextInt(20) + 5, datasetSize / 2); // 5-25 results
@@ -335,23 +338,5 @@ public class TestCuVSDeletedDocuments extends LuceneTestCase {
     return newIndexWriterConfig(new MockAnalyzer(random(), MockTokenizer.SIMPLE, true))
         .setCodec(codec)
         .setMergePolicy(newTieredMergePolicy());
-  }
-
-  private static float[][] generateDataset(Random random, int size, int dimensions) {
-    float[][] dataset = new float[size][dimensions];
-    for (int i = 0; i < size; i++) {
-      for (int j = 0; j < dimensions; j++) {
-        dataset[i][j] = random.nextFloat() * 100;
-      }
-    }
-    return dataset;
-  }
-
-  private static float[] generateRandomVector(int dimensions, Random random) {
-    float[] vector = new float[dimensions];
-    for (int i = 0; i < dimensions; i++) {
-      vector[i] = random.nextFloat() * 100;
-    }
-    return vector;
   }
 }

@@ -15,6 +15,8 @@
  */
 package com.nvidia.cuvs.lucene;
 
+import static com.nvidia.cuvs.lucene.TestUtils.generateDataset;
+
 import java.io.IOException;
 import java.util.List;
 import java.util.Map;
@@ -64,8 +66,7 @@ public class TestCuVSGaps extends LuceneTestCase {
 
   static int datasetSize;
   static int dimension;
-
-  public static float[][] dataset;
+  static float[][] dataset;
 
   @BeforeClass
   public static void beforeClass() throws Exception {
@@ -140,7 +141,7 @@ public class TestCuVSGaps extends LuceneTestCase {
     }
 
     // Verify the results match expected top-k based on Euclidean distance
-    List<Integer> expectedIds = calculateExpectedTopK(queryVector, topK);
+    List<Integer> expectedIds = calculateExpectedTopK(queryVector, topK, dataset);
     for (int i = 0; i < hits.length; i++) {
       String docId = reader.storedFields().document(hits[i].doc).get("id");
       int id = Integer.parseInt(docId);
@@ -174,23 +175,13 @@ public class TestCuVSGaps extends LuceneTestCase {
     log.info("Filtered alternating document test passed with " + filteredHits.length + " results");
   }
 
-  private static float[][] generateDataset(Random random, int datasetSize, int dimensions) {
-    float[][] dataset = new float[datasetSize][dimensions];
-    for (int i = 0; i < datasetSize; i++) {
-      for (int j = 0; j < dimensions; j++) {
-        dataset[i][j] = random.nextFloat() * 100;
-      }
-    }
-    return dataset;
-  }
-
-  private List<Integer> calculateExpectedTopK(float[] query, int topK) {
+  public static List<Integer> calculateExpectedTopK(float[] query, int topK, float[][] dataset) {
     Map<Integer, Double> distances = new TreeMap<>();
 
     // Calculate distances only for documents that have vectors (even-numbered)
-    for (int i = 0; i < datasetSize; i += 2) {
+    for (int i = 0; i < dataset.length; i += 2) {
       double distance = 0;
-      for (int j = 0; j < dimension; j++) {
+      for (int j = 0; j < dataset[0].length; j++) {
         distance += (query[j] - dataset[i][j]) * (query[j] - dataset[i][j]);
       }
       distances.put(i, distance);

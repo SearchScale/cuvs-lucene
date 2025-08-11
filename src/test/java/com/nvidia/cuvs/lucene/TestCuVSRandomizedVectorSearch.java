@@ -15,6 +15,9 @@
  */
 package com.nvidia.cuvs.lucene;
 
+import static com.nvidia.cuvs.lucene.TestUtils.generateDataset;
+import static com.nvidia.cuvs.lucene.TestUtils.generateQueries;
+
 import java.io.IOException;
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -149,28 +152,6 @@ public class TestCuVSRandomizedVectorSearch extends LuceneTestCase {
     }
   }
 
-  private static float[][] generateQueries(Random random, int dimensions, int numQueries) {
-    // Generate random query vectors
-    float[][] queries = new float[numQueries][dimensions];
-    for (int i = 0; i < numQueries; i++) {
-      for (int j = 0; j < dimensions; j++) {
-        queries[i][j] = random.nextFloat() * 100;
-      }
-    }
-    return queries;
-  }
-
-  private static float[][] generateDataset(Random random, int datasetSize, int dimensions) {
-    // Generate a random dataset
-    float[][] dataset = new float[datasetSize][dimensions];
-    for (int i = 0; i < datasetSize; i++) {
-      for (int j = 0; j < dimensions; j++) {
-        dataset[i][j] = random.nextFloat() * 100;
-      }
-    }
-    return dataset;
-  }
-
   private static List<List<Integer>> generateExpectedResults(
       int topK, float[][] dataset, float[][] queries) {
     List<List<Integer>> neighborsResult = new ArrayList<>();
@@ -195,12 +176,7 @@ public class TestCuVSRandomizedVectorSearch extends LuceneTestCase {
               .sorted(Map.Entry.comparingByValue())
               .map(Map.Entry::getKey)
               .toList();
-      neighborsResult.add(
-          neighbors.subList(
-              0,
-              Math.min(
-                  topK * 3,
-                  dataset.length))); // generate double the topK results in the expected array
+      neighborsResult.add(neighbors.subList(0, Math.min(topK * 3, dataset.length)));
     }
 
     log.info("Expected results generated successfully.");
