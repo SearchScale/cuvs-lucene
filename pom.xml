@@ -13,13 +13,7 @@
     <maven.compiler.source>21</maven.compiler.source>
   </properties>
 
-  <repositories>
-    <repository>
-      <id>cuvs-java</id>
-      <name>SearchScale Maven</name>
-      <url>https://maven.searchscale.com/snapshots</url>
-    </repository>
-  </repositories>
+  <!-- CuVS-Java dependency installed locally via mvn install:install-file -->
 
   <dependencies>
     <dependency>
@@ -65,6 +59,11 @@
       <version>2.17.0</version>
     </dependency>
     <dependency>
+      <groupId>org.mapdb</groupId>
+      <artifactId>mapdb</artifactId>
+      <version>3.0.9</version>
+    </dependency>
+    <dependency>
       <groupId>com.nvidia.cuvs</groupId>
       <artifactId>cuvs-java</artifactId>
       <version>25.10.0-lorenzo-9362a-SNAPSHOT</version>
@@ -73,6 +72,17 @@
 
   <build>
     <plugins>
+      <plugin>
+        <groupId>org.apache.maven.plugins</groupId>
+        <artifactId>maven-surefire-plugin</artifactId>
+        <version>3.2.2</version>
+        <configuration>
+          <argLine>--enable-native-access=ALL-UNNAMED -Djava.library.path=/home/puneet/miniforge3/envs/cuvs-25.08/lib</argLine>
+          <environmentVariables>
+            <LD_LIBRARY_PATH>/home/puneet/miniforge3/envs/cuvs-25.08/lib:${env.LD_LIBRARY_PATH}</LD_LIBRARY_PATH>
+          </environmentVariables>
+        </configuration>
+      </plugin>
       <plugin>
         <groupId>com.diffplug.spotless</groupId>
         <artifactId>spotless-maven-plugin</artifactId>
