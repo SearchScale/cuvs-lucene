@@ -480,4 +480,16 @@ public class CuVSVectorsReader extends KnnVectorsReader {
       case null, default -> throw new RuntimeException("UNEXPECTED: exception type", t);
     }
   }
+
+  public FieldInfos getFieldInfos() {
+    return fieldInfos;
+  }
+
+  public IntObjectHashMap<CuVSIndex> getCuvsIndexes() {
+    return cuvsIndices;
+  }
+
+  public IntObjectHashMap<FieldEntry> getFieldEntries() {
+    return fields;
+  }
 }
