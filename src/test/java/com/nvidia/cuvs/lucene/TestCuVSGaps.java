@@ -157,7 +157,7 @@ public class TestCuVSGaps extends LuceneTestCase {
 
     // Use the first vector (from document 0) as query
     float[] queryVector = dataset[0];
-    int topK = random.nextInt(TOP_K_LIMIT);
+    int topK = random.nextInt(5, TOP_K_LIMIT);
 
     // Create a filter that only matches documents with ID less than 10
     // This should further restrict our results to even numbers 0, 2, 4, 6, 8

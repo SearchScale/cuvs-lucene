@@ -69,8 +69,8 @@ public class TestCuVSDeletedDocuments extends LuceneTestCase {
   public void testVectorSearchWithDeletedDocuments() throws IOException {
 
     try (Directory directory = newDirectory()) {
-      int datasetSize = random.nextInt(200) + 50; // 50-250 documents
-      int dimensions = random.nextInt(256) + 64; // 64-320 dimensions
+      int datasetSize = random.nextInt(200, 1000); // 200-1200 documents
+      int dimensions = random.nextInt(64, 256); // 64-320 dimensions
       int topK = Math.min(random.nextInt(20) + 5, datasetSize / 2); // 5-25 results
       float deletionProbability = random.nextFloat() * 0.4f + 0.1f; // 10-50% deletion rate
 

@@ -65,8 +65,7 @@ public class TestCuVSRandomizedVectorSearch extends LuceneTestCase {
   static int DIMENSIONS_LIMIT = 2048;
   static int NUM_QUERIES_LIMIT = 10;
   static int TOP_K_LIMIT = 64; // TODO This fails beyond 64
-
-  public static float[][] dataset;
+  static float[][] dataset;
 
   @BeforeClass
   public static void beforeClass() throws Exception {
