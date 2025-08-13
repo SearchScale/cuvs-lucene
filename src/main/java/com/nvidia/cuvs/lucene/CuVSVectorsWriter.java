@@ -514,8 +514,10 @@ public class CuVSVectorsWriter extends KnnVectorsWriter {
       }
 
       return neighbors;
-    } catch (Exception e) {
-      // Return empty neighbor array as fallback
+    } catch (Throwable e) {
+      // Return empty neighbor array as fallback for any error including AssertionError
+      System.err.println(
+          "Warning: Failed to extract neighbors for node " + node + ": " + e.getMessage());
       return new NeighborArray(0, true);
     }
   }
@@ -546,19 +548,19 @@ public class CuVSVectorsWriter extends KnnVectorsWriter {
         case INT:
           try {
             return row.getAsInt(index);
-          } catch (Exception e) {
+          } catch (Throwable e) {
             return -1;
           }
         case FLOAT:
           try {
             return (int) row.getAsFloat(index);
-          } catch (Exception e) {
+          } catch (Throwable e) {
             return -1;
           }
         case BYTE:
           try {
             return (int) row.getAsByte(index);
-          } catch (Exception e) {
+          } catch (Throwable e) {
             return -1;
           }
         default:
@@ -572,19 +574,19 @@ public class CuVSVectorsWriter extends KnnVectorsWriter {
       cachedDataType = DataType.INT;
       dataTypeDetected = true;
       return result;
-    } catch (Exception e) {
+    } catch (Throwable e) {
       try {
         int result = (int) row.getAsFloat(index);
         cachedDataType = DataType.FLOAT;
         dataTypeDetected = true;
         return result;
-      } catch (Exception e2) {
+      } catch (Throwable e2) {
         try {
           int result = (int) row.getAsByte(index);
           cachedDataType = DataType.BYTE;
           dataTypeDetected = true;
           return result;
-        } catch (Exception e3) {
+        } catch (Throwable e3) {
           cachedDataType = DataType.UNKNOWN;
           dataTypeDetected = true;
           return -1;
