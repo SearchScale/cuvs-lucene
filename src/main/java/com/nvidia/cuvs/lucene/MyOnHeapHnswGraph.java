@@ -17,6 +17,8 @@ package com.nvidia.cuvs.lucene;
 
 import static org.apache.lucene.search.DocIdSetIterator.NO_MORE_DOCS;
 
+import java.util.ArrayList;
+import java.util.List;
 import org.apache.lucene.util.hnsw.HnswGraph;
 import org.apache.lucene.util.hnsw.NeighborArray;
 
@@ -24,29 +26,60 @@ public class MyOnHeapHnswGraph extends HnswGraph {
 
   private final int size;
   private final int dimensions;
-  private final int[][] adjacencyList;
-  private final NeighborArray[] neighbors;
+  private final int numLevels;
 
-  public MyOnHeapHnswGraph(int size, int dimensions, int[][] adjacencyList) {
+  // Store layers data - each layer has its own nodes and adjacency lists
+  private final List<int[]> layerNodes;
+  private final List<NeighborArray[]> layerNeighbors;
+
+  // Layer 0 is special - it contains all nodes
+  private final NeighborArray[] layer0Neighbors;
+
+  // Multi-layer constructor that supports arbitrary number of layers
+  public MyOnHeapHnswGraph(
+      int size, int dimensions, List<int[]> layerNodes, List<int[][]> layerAdjacencies) {
+
     this.size = size;
     this.dimensions = dimensions;
-    this.adjacencyList = adjacencyList;
-    this.neighbors = new NeighborArray[size];
+    this.numLevels = layerAdjacencies.size();
+    this.layerNodes = new ArrayList<>();
+    this.layerNeighbors = new ArrayList<>();
 
-    // Convert adjacency list to NeighborArray format
+    // Process Layer 0 (base layer with all nodes)
+    int[][] layer0Adjacency = layerAdjacencies.get(0);
+    this.layer0Neighbors = new NeighborArray[size];
+
     for (int i = 0; i < size; i++) {
-      if (adjacencyList[i] != null && adjacencyList[i].length > 0) {
-        // Create NeighborArray with descending order (true)
-        neighbors[i] = new NeighborArray(adjacencyList[i].length, true);
-        // Add neighbors - assuming they are already sorted by distance
-        for (int j = 0; j < adjacencyList[i].length; j++) {
-          // Using placeholder scores for now - in real implementation these would be actual
-          // distances
-          neighbors[i].addInOrder(adjacencyList[i][j], 1.0f - (j * 0.001f));
+      if (layer0Adjacency[i] != null && layer0Adjacency[i].length > 0) {
+        layer0Neighbors[i] = new NeighborArray(layer0Adjacency[i].length, true);
+        for (int j = 0; j < layer0Adjacency[i].length; j++) {
+          layer0Neighbors[i].addInOrder(layer0Adjacency[i][j], 1.0f - (j * 0.001f));
         }
       } else {
-        neighbors[i] = new NeighborArray(0, true);
+        layer0Neighbors[i] = new NeighborArray(0, true);
       }
+    }
+
+    // Process higher layers (1 to numLevels-1)
+    for (int level = 1; level < numLevels; level++) {
+      int[] nodes = layerNodes.get(level);
+      int[][] adjacency = layerAdjacencies.get(level);
+
+      this.layerNodes.add(nodes);
+      NeighborArray[] neighbors = new NeighborArray[nodes.length];
+
+      for (int i = 0; i < nodes.length; i++) {
+        if (adjacency[i] != null && adjacency[i].length > 0) {
+          neighbors[i] = new NeighborArray(adjacency[i].length, true);
+          for (int j = 0; j < adjacency[i].length; j++) {
+            neighbors[i].addInOrder(adjacency[i][j], 1.0f - (j * 0.001f));
+          }
+        } else {
+          neighbors[i] = new NeighborArray(0, true);
+        }
+      }
+
+      this.layerNeighbors.add(neighbors);
     }
   }
 
@@ -55,22 +88,33 @@ public class MyOnHeapHnswGraph extends HnswGraph {
   }
 
   public int numLevels() {
-    // CAGRA graph has only one level
-    return 1;
+    return numLevels;
   }
 
   public NodesIterator getNodesOnLevel(int level) {
     if (level == 0) {
       return new ArrayNodesIterator(size);
+    } else if (level > 0 && level < numLevels) {
+      int[] nodes = layerNodes.get(level - 1);
+      return new SpecificNodesIterator(nodes);
     } else {
-      // No nodes on levels > 0 for CAGRA
       return new ArrayNodesIterator(0);
     }
   }
 
   public NeighborArray getNeighbors(int level, int node) {
     if (level == 0 && node < size) {
-      return neighbors[node];
+      return layer0Neighbors[node];
+    } else if (level > 0 && level < numLevels) {
+      int[] nodes = layerNodes.get(level - 1);
+      NeighborArray[] neighbors = layerNeighbors.get(level - 1);
+
+      // Find the index of this node in the layer
+      for (int i = 0; i < nodes.length; i++) {
+        if (nodes[i] == node) {
+          return neighbors[i];
+        }
+      }
     }
     return null;
   }
@@ -92,16 +136,23 @@ public class MyOnHeapHnswGraph extends HnswGraph {
     if (currentLevel == 0
         && currentNode >= 0
         && currentNode < size
-        && neighbors[currentNode] != null) {
+        && layer0Neighbors[currentNode] != null) {
       neighborIndex++;
-      if (neighborIndex < neighbors[currentNode].size()) {
-        int neighborNode = neighbors[currentNode].nodes()[neighborIndex];
-        // Add bounds check to prevent index out of bounds
+      if (neighborIndex < layer0Neighbors[currentNode].size()) {
+        int neighborNode = layer0Neighbors[currentNode].nodes()[neighborIndex];
         if (neighborNode >= 0 && neighborNode < size) {
           return neighborNode;
         } else {
-          // Skip invalid neighbor and try next
-          return nextNeighbor();
+          return nextNeighbor(); // Skip invalid neighbor
+        }
+      }
+    } else if (currentLevel > 0 && currentLevel < numLevels) {
+      // Handle higher layers
+      NeighborArray neighbors = getNeighbors(currentLevel, currentNode);
+      if (neighbors != null) {
+        neighborIndex++;
+        if (neighborIndex < neighbors.size()) {
+          return neighbors.nodes()[neighborIndex];
         }
       }
     }
@@ -110,15 +161,25 @@ public class MyOnHeapHnswGraph extends HnswGraph {
 
   @Override
   public int entryNode() {
-    // For a single-level graph, entry node is typically 0
-    return 0;
+    // Entry node should be from the highest layer
+    if (numLevels > 1) {
+      int topLevel = numLevels - 1;
+      int[] topLayerNodes = layerNodes.get(topLevel - 1);
+      if (topLayerNodes != null && topLayerNodes.length > 0) {
+        // Use random node from top layer with fixed seed for reproducibility
+        java.util.Random random = new java.util.Random(44);
+        int randomIndex = random.nextInt(topLayerNodes.length);
+        return topLayerNodes[randomIndex];
+      }
+    }
+    return 0; // Default to node 0 for single-layer graphs
   }
 
   @Override
   public int maxConn() {
-    // Return the maximum degree across all nodes
+    // Return the maximum degree across all nodes in layer 0
     int max = 0;
-    for (NeighborArray neighbor : neighbors) {
+    for (NeighborArray neighbor : layer0Neighbors) {
       if (neighbor != null) {
         max = Math.max(max, neighbor.size());
       }
@@ -128,8 +189,14 @@ public class MyOnHeapHnswGraph extends HnswGraph {
 
   @Override
   public int neighborCount() {
-    if (currentNode >= 0 && currentNode < size && neighbors[currentNode] != null) {
-      return neighbors[currentNode].size();
+    if (currentLevel == 0
+        && currentNode >= 0
+        && currentNode < size
+        && layer0Neighbors[currentNode] != null) {
+      return layer0Neighbors[currentNode].size();
+    } else if (currentLevel > 0 && currentLevel < numLevels) {
+      NeighborArray neighbors = getNeighbors(currentLevel, currentNode);
+      return neighbors != null ? neighbors.size() : 0;
     }
     return 0;
   }
@@ -157,6 +224,36 @@ public class MyOnHeapHnswGraph extends HnswGraph {
       int numToCopy = Math.min(dest.length, size - (current + 1));
       for (int i = 0; i < numToCopy; i++) {
         dest[i] = ++current;
+      }
+      return numToCopy;
+    }
+  }
+
+  // NodesIterator for specific nodes in higher layers
+  private static class SpecificNodesIterator extends NodesIterator {
+    private final int[] nodeIds;
+    private int current = -1;
+
+    SpecificNodesIterator(int[] nodeIds) {
+      super(nodeIds.length);
+      this.nodeIds = nodeIds;
+    }
+
+    @Override
+    public boolean hasNext() {
+      return current + 1 < nodeIds.length;
+    }
+
+    @Override
+    public int nextInt() {
+      return nodeIds[++current];
+    }
+
+    @Override
+    public int consume(int[] dest) {
+      int numToCopy = Math.min(dest.length, nodeIds.length - (current + 1));
+      for (int i = 0; i < numToCopy; i++) {
+        dest[i] = nodeIds[++current];
       }
       return numToCopy;
     }

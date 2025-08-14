@@ -35,10 +35,23 @@ public class CuVSCPUSearchCodec extends FilterCodec {
     initializeFormat();
   }
 
+  public CuVSCPUSearchCodec(
+      int cuvsWriterThreads, int intGraphDegree, int graphDegree, int hnswLayers) {
+    this("CuVSCPUSearchCodec", new Lucene101Codec());
+    initializeFormat(cuvsWriterThreads, intGraphDegree, graphDegree, hnswLayers);
+  }
+
   private void initializeFormat() {
+    initializeFormat(1, 128, 64, 1); // Default values
+  }
+
+  private void initializeFormat(
+      int cuvsWriterThreads, int intGraphDegree, int graphDegree, int hnswLayers) {
     KnnVectorsFormat format;
     try {
-      format = new CuVSVectorsFormat(1, 128, 64, IndexType.HNSW_LUCENE);
+      format =
+          new CuVSVectorsFormat(
+              cuvsWriterThreads, intGraphDegree, graphDegree, hnswLayers, IndexType.HNSW_LUCENE);
       setKnnFormat(format);
     } catch (LibraryException ex) {
       Logger log = Logger.getLogger(CuVSCodec.class.getName());

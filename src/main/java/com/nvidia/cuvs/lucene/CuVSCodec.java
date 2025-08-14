@@ -38,7 +38,7 @@ public class CuVSCodec extends FilterCodec {
   private void initializeFormat() {
     KnnVectorsFormat format;
     try {
-      format = new CuVSVectorsFormat(1, 128, 64, IndexType.CAGRA);
+      format = new CuVSVectorsFormat(1, 128, 64, 1, IndexType.CAGRA);
       setKnnFormat(format);
     } catch (LibraryException ex) {
       Logger log = Logger.getLogger(CuVSCodec.class.getName());
