@@ -15,22 +15,21 @@
  */
 package com.nvidia.cuvs.lucene;
 
-import com.nvidia.cuvs.LibraryException;
-import com.nvidia.cuvs.lucene.CuVSVectorsWriter.IndexType;
 import java.util.logging.Logger;
 import org.apache.lucene.codecs.Codec;
 import org.apache.lucene.codecs.FilterCodec;
 import org.apache.lucene.codecs.KnnVectorsFormat;
 import org.apache.lucene.codecs.lucene101.Lucene101Codec;
+import org.apache.lucene.codecs.lucene99.Lucene99HnswVectorsFormat;
 
 /** CuVS based codec for GPU based vector search */
-public class CuVSCodec extends FilterCodec {
+public class CuVSCPUSearchCodec extends FilterCodec {
 
-  public CuVSCodec() {
-    this("CuVSCodec", new Lucene101Codec());
+  public CuVSCPUSearchCodec() {
+    this("CuVSCPUSearchCodec", new Lucene101Codec());
   }
 
-  public CuVSCodec(String name, Codec delegate) {
+  public CuVSCPUSearchCodec(String name, Codec delegate) {
     super(name, delegate);
     initializeFormat();
   }
@@ -38,11 +37,27 @@ public class CuVSCodec extends FilterCodec {
   private void initializeFormat() {
     KnnVectorsFormat format;
     try {
-      format = new CuVSVectorsFormat(1, 128, 64, IndexType.CAGRA);
+      // Use the dedicated CPU search format
+      format = new CuVSCPUSearchVectorsFormat();
       setKnnFormat(format);
-    } catch (LibraryException ex) {
-      Logger log = Logger.getLogger(CuVSCodec.class.getName());
-      log.severe("Couldn't load native library, possible classloader issue. " + ex.getMessage());
+      Logger log = Logger.getLogger(CuVSCPUSearchCodec.class.getName());
+      log.info("CuVSCPUSearchVectorsFormat initialized successfully");
+    } catch (Exception ex) {
+      Logger log = Logger.getLogger(CuVSCPUSearchCodec.class.getName());
+      log.warning(
+          "CuVS CPU search format initialization issue: "
+              + ex.getMessage()
+              + ". Falling back to standard Lucene HNSW...");
+
+      try {
+        // Fall back to standard Lucene HNSW format with optimized parameters for CPU search
+        format = new Lucene99HnswVectorsFormat(64, 200);
+        setKnnFormat(format);
+        log.info("Fallback to Lucene99HnswVectorsFormat successful");
+      } catch (Exception fallbackEx) {
+        log.severe("Failed to create fallback HNSW format: " + fallbackEx.getMessage());
+        setKnnFormat(null);
+      }
     }
   }
 
