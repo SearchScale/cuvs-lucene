@@ -76,7 +76,7 @@ public class Lucene99AcceleratedHNSWVectorsFormat extends KnnVectorsFormat {
    */
   public Lucene99AcceleratedHNSWVectorsFormat(
       int cuvsWriterThreads, int intGraphDegree, int graphDegree, int hnswLayers) {
-    super("CuVSVectorsFormat");
+    super("Lucene99AcceleratedHNSWVectorsFormat");
     this.cuvsWriterThreads = cuvsWriterThreads;
     this.intGraphDegree = intGraphDegree;
     this.graphDegree = graphDegree;

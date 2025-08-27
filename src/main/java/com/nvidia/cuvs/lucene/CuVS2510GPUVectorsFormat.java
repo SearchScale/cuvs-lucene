@@ -86,7 +86,7 @@ public class CuVS2510GPUVectorsFormat extends KnnVectorsFormat {
       int graphDegree,
       int hnswLayers,
       IndexType indexType) {
-    super("CuVSVectorsFormat");
+    super("CuVS2510GPUVectorsFormat");
     this.cuvsWriterThreads = cuvsWriterThreads;
     this.intGraphDegree = intGraphDegree;
     this.graphDegree = graphDegree;
