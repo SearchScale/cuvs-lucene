@@ -16,9 +16,6 @@
 package com.nvidia.cuvs.lucene;
 
 import static com.nvidia.cuvs.lucene.Utils.cuVSResourcesOrNull;
-import static org.apache.lucene.codecs.lucene99.Lucene99HnswVectorsFormat.DEFAULT_BEAM_WIDTH;
-import static org.apache.lucene.codecs.lucene99.Lucene99HnswVectorsFormat.DEFAULT_MAX_CONN;
-import static org.apache.lucene.codecs.lucene99.Lucene99HnswVectorsFormat.DEFAULT_NUM_MERGE_WORKER;
 
 import com.nvidia.cuvs.CuVSResources;
 import com.nvidia.cuvs.LibraryException;
@@ -27,11 +24,7 @@ import java.util.logging.Logger;
 import org.apache.lucene.codecs.KnnVectorsFormat;
 import org.apache.lucene.codecs.KnnVectorsReader;
 import org.apache.lucene.codecs.KnnVectorsWriter;
-import org.apache.lucene.codecs.hnsw.DefaultFlatVectorScorer;
 import org.apache.lucene.codecs.hnsw.FlatVectorsFormat;
-import org.apache.lucene.codecs.lucene99.Lucene99FlatVectorsFormat;
-import org.apache.lucene.codecs.lucene99.Lucene99HnswVectorsReader;
-import org.apache.lucene.codecs.lucene99.Lucene99HnswVectorsWriter;
 import org.apache.lucene.index.SegmentReadState;
 import org.apache.lucene.index.SegmentWriteState;
 
@@ -53,9 +46,8 @@ public class Lucene99AcceleratedHNSWVectorsFormat extends KnnVectorsFormat {
 
   private static CuVSResources resources = cuVSResourcesOrNull();
 
-  /** The format for storing, reading, and merging raw vectors on disk. */
   private static final FlatVectorsFormat flatVectorsFormat =
-      new Lucene99FlatVectorsFormat(DefaultFlatVectorScorer.INSTANCE);
+      (FlatVectorsFormat) new Lucene99Provider().getLucene99FlatVectorsFormatInstance();
 
   private final int maxDimensions = 4096;
   private final int cuvsWriterThreads;
@@ -77,8 +69,8 @@ public class Lucene99AcceleratedHNSWVectorsFormat extends KnnVectorsFormat {
         DEFAULT_INTERMEDIATE_GRAPH_DEGREE,
         DEFAULT_GRAPH_DEGREE,
         DEFAULT_HNSW_GRAPH_LAYERS,
-        DEFAULT_MAX_CONN,
-        DEFAULT_BEAM_WIDTH);
+        new Lucene99Provider().getDefaultMaxConnection(),
+        new Lucene99Provider().getDefaultBeamWidth());
   }
 
   /**
@@ -113,14 +105,21 @@ public class Lucene99AcceleratedHNSWVectorsFormat extends KnnVectorsFormat {
       log.warning(
           "GPU based indexing not supported, falling back to using the Lucene99HnswVectorsWriter");
       // TODO: Make num merge workers configurable.
-      return new Lucene99HnswVectorsWriter(
-          state, maxConn, beamWidth, flatWriter, DEFAULT_NUM_MERGE_WORKER, null);
+      return new Lucene99Provider()
+          .getLucene99HnswVectorsWriterInstance(
+              state,
+              maxConn,
+              beamWidth,
+              flatWriter,
+              new Lucene99Provider().getDefaultNumMergeWorker(),
+              null);
     }
   }
 
   @Override
   public KnnVectorsReader fieldsReader(SegmentReadState state) throws IOException {
-    return new Lucene99HnswVectorsReader(state, flatVectorsFormat.fieldsReader(state));
+    return new Lucene99Provider()
+        .getLucene99HnswVectorsReaderInstance(state, flatVectorsFormat.fieldsReader(state));
   }
 
   @Override

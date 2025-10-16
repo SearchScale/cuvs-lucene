@@ -24,9 +24,7 @@ import java.io.IOException;
 import java.util.logging.Logger;
 import org.apache.lucene.codecs.KnnVectorsFormat;
 import org.apache.lucene.codecs.KnnVectorsReader;
-import org.apache.lucene.codecs.hnsw.DefaultFlatVectorScorer;
 import org.apache.lucene.codecs.hnsw.FlatVectorsFormat;
-import org.apache.lucene.codecs.lucene99.Lucene99FlatVectorsFormat;
 import org.apache.lucene.index.SegmentReadState;
 import org.apache.lucene.index.SegmentWriteState;
 
@@ -51,9 +49,8 @@ public class CuVS2510GPUVectorsFormat extends KnnVectorsFormat {
 
   static CuVSResources resources = cuVSResourcesOrNull();
 
-  /** The format for storing, reading, and merging raw vectors on disk. */
   private static final FlatVectorsFormat flatVectorsFormat =
-      new Lucene99FlatVectorsFormat(DefaultFlatVectorScorer.INSTANCE);
+      new Lucene99Provider().getLucene99FlatVectorsFormatInstance();
 
   final int maxDimensions = 4096;
   final int cuvsWriterThreads;

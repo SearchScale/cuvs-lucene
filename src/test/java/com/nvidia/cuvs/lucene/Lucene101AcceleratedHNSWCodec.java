@@ -15,9 +15,6 @@
  */
 package com.nvidia.cuvs.lucene;
 
-import static org.apache.lucene.codecs.lucene99.Lucene99HnswVectorsFormat.DEFAULT_BEAM_WIDTH;
-import static org.apache.lucene.codecs.lucene99.Lucene99HnswVectorsFormat.DEFAULT_MAX_CONN;
-
 import com.nvidia.cuvs.LibraryException;
 import java.util.logging.Logger;
 import org.apache.lucene.codecs.Codec;
@@ -65,8 +62,8 @@ public class Lucene101AcceleratedHNSWCodec extends FilterCodec {
         DEFAULT_INTERMEDIATE_GRAPH_DEGREE,
         DEFAULT_GRAPH_DEGREE,
         DEFAULT_HNSW_LAYERS,
-        DEFAULT_MAX_CONN,
-        DEFAULT_BEAM_WIDTH);
+        new Lucene99Provider().getDefaultMaxConnection(),
+        new Lucene99Provider().getDefaultBeamWidth());
   }
 
   private void initializeFormat(
