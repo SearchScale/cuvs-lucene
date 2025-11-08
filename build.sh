@@ -15,7 +15,7 @@ function hasArg {
 }
 
 MAVEN_VERIFY_ARGS=()
-if ! hasArg --run-java-tests; then
+if ! hasArg --run-tests; then
   MAVEN_VERIFY_ARGS=("-DskipTests")
 fi
 
@@ -24,6 +24,6 @@ mvn verify "${MAVEN_VERIFY_ARGS[@]}" \
   && cp pom.xml ./target/
 
 # Generate JaCoCo code coverage reports
-if hasArg --run-java-tests; then
+if hasArg --run-tests; then
   mvn jacoco:report
 fi
