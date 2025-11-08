@@ -22,3 +22,8 @@ fi
 mvn verify "${MAVEN_VERIFY_ARGS[@]}" \
   && mvn install:install-file -Dfile=./target/cuvs-lucene-$VERSION.jar -DgroupId=$GROUP_ID -DartifactId=cuvs-lucene -Dversion=$VERSION -Dpackaging=jar \
   && cp pom.xml ./target/
+
+# Generate JaCoCo code coverage reports
+if hasArg --run-java-tests; then
+  mvn jacoco:report
+fi
