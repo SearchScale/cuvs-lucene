@@ -11,7 +11,7 @@
 
     <groupId>com.nvidia.cuvs.lucene.benchmarks</groupId>
     <artifactId>cuvs-lucene-benchmarks</artifactId>
-    <version>1.0</version>
+    <!--CUVS_JAVA#VERSION_UPDATE_MARKER_START--><version>26.02.0</version><!--CUVS_JAVA#VERSION_UPDATE_MARKER_END-->
     <packaging>jar</packaging>
 
     <name>cuvs-lucene-benchmarks</name>
@@ -28,17 +28,45 @@
             <version>${jmh.version}</version>
             <scope>provided</scope>
         </dependency>
+        <dependency>
+            <groupId>com.nvidia.cuvs.lucene</groupId>
+            <artifactId>cuvs-lucene</artifactId>
+            <!--CUVS_LUCENE#VERSION_UPDATE_MARKER_START--><version>26.02.0</version><!--CUVS_LUCENE#VERSION_UPDATE_MARKER_END-->
+        </dependency>
+	    <dependency>
+	        <groupId>commons-io</groupId>
+	        <artifactId>commons-io</artifactId>
+	        <version>2.18.0</version>
+	    </dependency>
     </dependencies>
 
     <properties>
         <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
         <jmh.version>1.37</jmh.version>
-        <javac.target>1.8</javac.target>
+        <javac.target>22</javac.target>
+        <maven.compiler.target>22</maven.compiler.target>
+        <maven.compiler.source>22</maven.compiler.source>
         <uberjar.name>benchmarks</uberjar.name>
     </properties>
 
     <build>
         <plugins>
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-jar-plugin</artifactId>
+                <version>3.4.2</version>
+                <configuration>
+                    <archive>
+                        <manifest>
+                            <addDefaultImplementationEntries>true</addDefaultImplementationEntries>
+                        </manifest>
+                        <manifestEntries>
+                            <Multi-Release>true</Multi-Release>
+                            <addClasspath>true</addClasspath>
+                        </manifestEntries>
+                    </archive>
+                </configuration>
+            </plugin>
             <plugin>
                 <groupId>com.diffplug.spotless</groupId>
                 <artifactId>spotless-maven-plugin</artifactId>
@@ -98,10 +126,6 @@
                             </transformers>
                             <filters>
                                 <filter>
-                                    <!--
-                                        Shading signed JARs will fail without this.
-                                        http://stackoverflow.com/questions/999489/invalid-signature-file-when-attempting-to-run-a-jar
-                                    -->
                                     <artifact>*:*</artifact>
                                     <excludes>
                                         <exclude>META-INF/*.SF</exclude>
@@ -131,7 +155,7 @@
                 </plugin>
                 <plugin>
                     <artifactId>maven-jar-plugin</artifactId>
-                    <version>2.4</version>
+                    <version>3.4.2</version>
                 </plugin>
                 <plugin>
                     <artifactId>maven-javadoc-plugin</artifactId>
@@ -156,5 +180,4 @@
             </plugins>
         </pluginManagement>
     </build>
-
 </project>
