@@ -30,7 +30,9 @@ public class TestLucene99AcceleratedHNSWVectorsFormat extends BaseKnnVectorsForm
 
   @BeforeClass
   public static void beforeClass() {
-    assumeTrue("cuVS is not supported", Lucene99AcceleratedHNSWVectorsFormat.supported());
+    assumeTrue(
+        "cuVS not supported so skipping these tests",
+        Lucene99AcceleratedHNSWVectorsFormat.supported());
   }
 
   @Override

@@ -115,7 +115,7 @@ public class TestAcceleratedHNSWDeletedDocuments extends LuceneTestCase {
       try (DirectoryReader reader = DirectoryReader.open(directory)) {
         IndexSearcher searcher = newSearcher(reader);
         // Use a random vector for query
-        float[] queryVector = generateRandomVector(dimensions, random);
+        float[] queryVector = generateRandomVector(random, dimensions);
 
         Query query = new KnnFloatVectorQuery("vector", queryVector, topK);
         ScoreDoc[] hits = searcher.search(query, topK).scoreDocs;
@@ -190,7 +190,7 @@ public class TestAcceleratedHNSWDeletedDocuments extends LuceneTestCase {
       // Test vector search behavior
       try (DirectoryReader reader = DirectoryReader.open(directory)) {
         IndexSearcher searcher = newSearcher(reader);
-        float[] queryVector = generateRandomVector(dimensions, random);
+        float[] queryVector = generateRandomVector(random, dimensions);
 
         Query query = new KnnFloatVectorQuery("vector", queryVector, topK);
         ScoreDoc[] hits = searcher.search(query, topK).scoreDocs;
@@ -247,7 +247,7 @@ public class TestAcceleratedHNSWDeletedDocuments extends LuceneTestCase {
       // Verify search returns no results
       try (DirectoryReader reader = DirectoryReader.open(directory)) {
         IndexSearcher searcher = newSearcher(reader);
-        float[] queryVector = generateRandomVector(dimensions, random);
+        float[] queryVector = generateRandomVector(random, dimensions);
 
         Query query = new KnnFloatVectorQuery("vector", queryVector, topK);
         TopDocs results = searcher.search(query, topK);
@@ -303,7 +303,7 @@ public class TestAcceleratedHNSWDeletedDocuments extends LuceneTestCase {
       // Verify search behavior after deletions and additions
       try (DirectoryReader reader = DirectoryReader.open(directory)) {
         IndexSearcher searcher = newSearcher(reader);
-        float[] queryVector = generateRandomVector(dimensions, random);
+        float[] queryVector = generateRandomVector(random, dimensions);
 
         Query query = new KnnFloatVectorQuery("vector", queryVector, topK);
         ScoreDoc[] hits = searcher.search(query, topK).scoreDocs;

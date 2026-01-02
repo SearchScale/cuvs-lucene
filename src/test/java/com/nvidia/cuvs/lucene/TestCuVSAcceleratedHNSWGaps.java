@@ -4,7 +4,7 @@
  */
 package com.nvidia.cuvs.lucene;
 
-import static com.nvidia.cuvs.lucene.TestUtils.generateDataset;
+import static com.nvidia.cuvs.lucene.TestUtils.generateRandomVectors;
 
 import java.io.IOException;
 import java.util.List;
@@ -61,7 +61,9 @@ public class TestCuVSAcceleratedHNSWGaps extends LuceneTestCase {
 
   @BeforeClass
   public static void beforeClass() throws Exception {
-    assumeTrue("cuVS not supported", Lucene99AcceleratedHNSWVectorsFormat.supported());
+    assumeTrue(
+        "cuVS not supported so skipping these tests",
+        Lucene99AcceleratedHNSWVectorsFormat.supported());
     directory = newDirectory();
     random = random();
 
@@ -78,7 +80,7 @@ public class TestCuVSAcceleratedHNSWGaps extends LuceneTestCase {
 
     datasetSize = random.nextInt(100, DATASET_SIZE_LIMIT);
     dimension = random.nextInt(8, DIMENSIONS_LIMIT);
-    dataset = generateDataset(random, datasetSize, dimension);
+    dataset = generateRandomVectors(random, datasetSize, dimension);
 
     // Create documents where only even-numbered documents have vectors
     for (int i = 0; i < datasetSize; i++) {

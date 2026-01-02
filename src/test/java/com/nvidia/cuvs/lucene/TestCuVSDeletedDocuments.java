@@ -4,8 +4,8 @@
  */
 package com.nvidia.cuvs.lucene;
 
-import static com.nvidia.cuvs.lucene.TestUtils.generateDataset;
 import static com.nvidia.cuvs.lucene.TestUtils.generateRandomVector;
+import static com.nvidia.cuvs.lucene.TestUtils.generateRandomVectors;
 
 import java.io.IOException;
 import java.util.ArrayList;
@@ -50,7 +50,7 @@ public class TestCuVSDeletedDocuments extends LuceneTestCase {
 
   @BeforeClass
   public static void beforeClass() throws Exception {
-    assumeTrue("cuVS not supported", CuVS2510GPUVectorsFormat.supported());
+    assumeTrue("cuVS not supported so skipping these tests", CuVS2510GPUVectorsFormat.supported());
     random = random();
   }
 
@@ -63,7 +63,7 @@ public class TestCuVSDeletedDocuments extends LuceneTestCase {
       int topK = Math.min(random.nextInt(20) + 5, datasetSize / 2); // 5-25 results
       float deletionProbability = random.nextFloat() * 0.4f + 0.1f; // 10-50% deletion rate
 
-      float[][] dataset = generateDataset(random, datasetSize, dimensions);
+      float[][] dataset = generateRandomVectors(random, datasetSize, dimensions);
       Set<Integer> deletedDocs = new HashSet<>();
 
       // Create index with all documents having vectors
@@ -90,7 +90,7 @@ public class TestCuVSDeletedDocuments extends LuceneTestCase {
       try (DirectoryReader reader = DirectoryReader.open(directory)) {
         IndexSearcher searcher = newSearcher(reader);
         // Use a random vector for query
-        float[] queryVector = generateRandomVector(dimensions, random);
+        float[] queryVector = generateRandomVector(random, dimensions);
 
         GPUKnnFloatVectorQuery query =
             new GPUKnnFloatVectorQuery("vector", queryVector, topK, null, topK, 1);
@@ -131,7 +131,7 @@ public class TestCuVSDeletedDocuments extends LuceneTestCase {
       float vectorProbability = random.nextFloat() * 0.5f + 0.3f; // 30-80% have vectors
       float deletionProbability = random.nextFloat() * 0.3f + 0.1f; // 10-40% deletion rate
 
-      float[][] dataset = generateDataset(random, datasetSize, dimensions);
+      float[][] dataset = generateRandomVectors(random, datasetSize, dimensions);
       Set<Integer> docsWithoutVectors = new HashSet<>();
       Set<Integer> deletedDocs = new HashSet<>();
 
@@ -167,7 +167,7 @@ public class TestCuVSDeletedDocuments extends LuceneTestCase {
       // Test vector search behavior
       try (DirectoryReader reader = DirectoryReader.open(directory)) {
         IndexSearcher searcher = newSearcher(reader);
-        float[] queryVector = generateRandomVector(dimensions, random);
+        float[] queryVector = generateRandomVector(random, dimensions);
 
         GPUKnnFloatVectorQuery query =
             new GPUKnnFloatVectorQuery("vector", queryVector, topK, null, topK, 1);
@@ -208,7 +208,7 @@ public class TestCuVSDeletedDocuments extends LuceneTestCase {
       int dimensions = random.nextInt(128) + 32; // 32-160 dimensions
       int topK = Math.min(random.nextInt(10) + 5, datasetSize); // 5-15 results
 
-      float[][] dataset = generateDataset(random, datasetSize, dimensions);
+      float[][] dataset = generateRandomVectors(random, datasetSize, dimensions);
 
       // Create and delete all documents
       try (IndexWriter writer = new IndexWriter(directory, createWriterConfig())) {
@@ -232,7 +232,7 @@ public class TestCuVSDeletedDocuments extends LuceneTestCase {
       // Verify search returns no results
       try (DirectoryReader reader = DirectoryReader.open(directory)) {
         IndexSearcher searcher = newSearcher(reader);
-        float[] queryVector = generateRandomVector(dimensions, random);
+        float[] queryVector = generateRandomVector(random, dimensions);
 
         GPUKnnFloatVectorQuery query =
             new GPUKnnFloatVectorQuery("vector", queryVector, topK, null, topK, 1);
@@ -255,7 +255,7 @@ public class TestCuVSDeletedDocuments extends LuceneTestCase {
       int topK = Math.min(random.nextInt(20) + 5, datasetSize / 2); // 5-25 results
       float deletionProbability = random.nextFloat() * 0.3f + 0.1f; // 10-40% deletion rate
 
-      float[][] dataset = generateDataset(random, datasetSize, dimensions);
+      float[][] dataset = generateRandomVectors(random, datasetSize, dimensions);
       List<Integer> activeDocIds = new ArrayList<>();
 
       // Initial indexing
@@ -294,7 +294,7 @@ public class TestCuVSDeletedDocuments extends LuceneTestCase {
       // Verify search behavior after deletions and additions
       try (DirectoryReader reader = DirectoryReader.open(directory)) {
         IndexSearcher searcher = newSearcher(reader);
-        float[] queryVector = generateRandomVector(dimensions, random);
+        float[] queryVector = generateRandomVector(random, dimensions);
 
         GPUKnnFloatVectorQuery query =
             new GPUKnnFloatVectorQuery("vector", queryVector, topK, null, topK, 1);

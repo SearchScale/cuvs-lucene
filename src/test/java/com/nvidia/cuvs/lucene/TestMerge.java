@@ -61,7 +61,7 @@ public class TestMerge extends LuceneTestCase {
 
   @BeforeClass
   public static void beforeClass() {
-    assumeTrue("cuVS is not supported", CuVS2510GPUVectorsFormat.supported());
+    assumeTrue("cuVS not supported so skipping these tests", CuVS2510GPUVectorsFormat.supported());
   }
 
   private Directory directory;

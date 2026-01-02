@@ -4,8 +4,8 @@
  */
 package com.nvidia.cuvs.lucene;
 
-import static com.nvidia.cuvs.lucene.TestUtils.generateDataset;
 import static com.nvidia.cuvs.lucene.TestUtils.generateQueries;
+import static com.nvidia.cuvs.lucene.TestUtils.generateRandomVectors;
 
 import java.io.IOException;
 import java.util.ArrayList;
@@ -61,7 +61,9 @@ public class TestCuVSRandomizedHNSWVectorSearch extends LuceneTestCase {
 
   @BeforeClass
   public static void beforeClass() throws Exception {
-    assumeTrue("cuVS not supported", Lucene99AcceleratedHNSWVectorsFormat.supported());
+    assumeTrue(
+        "cuVS not supported so skipping these tests",
+        Lucene99AcceleratedHNSWVectorsFormat.supported());
     directory = newDirectory();
 
     RandomIndexWriter writer =
@@ -78,7 +80,7 @@ public class TestCuVSRandomizedHNSWVectorSearch extends LuceneTestCase {
     Random random = random();
     int datasetSize = random.nextInt(DATASET_SIZE_LIMIT) + 1;
     int dimensions = random.nextInt(DIMENSIONS_LIMIT) + 1;
-    dataset = generateDataset(random, datasetSize, dimensions);
+    dataset = generateRandomVectors(random, datasetSize, dimensions);
     for (int i = 0; i < datasetSize; i++) {
       Document doc = new Document();
       doc.add(new StringField("id", String.valueOf(i), Field.Store.YES));
