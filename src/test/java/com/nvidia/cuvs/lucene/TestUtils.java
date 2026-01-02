@@ -8,7 +8,7 @@ import java.util.Random;
 
 public class TestUtils {
 
-  public static float[][] generateDataset(Random random, int size, int dimensions) {
+  public static float[][] generateRandomVectors(Random random, int size, int dimensions) {
     float[][] dataset = new float[size][dimensions];
     for (int i = 0; i < size; i++) {
       for (int j = 0; j < dimensions; j++) {
@@ -19,11 +19,7 @@ public class TestUtils {
   }
 
   public static float[] generateRandomVector(int dimensions, Random random) {
-    float[] vector = new float[dimensions];
-    for (int i = 0; i < dimensions; i++) {
-      vector[i] = random.nextFloat() * 100;
-    }
-    return vector;
+    return generateRandomVectors(random, 1, dimensions)[0];
   }
 
   public static float[][] generateQueries(Random random, int dimensions, int numQueries) {

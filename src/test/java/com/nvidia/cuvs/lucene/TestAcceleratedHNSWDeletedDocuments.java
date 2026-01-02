@@ -4,8 +4,8 @@
  */
 package com.nvidia.cuvs.lucene;
 
-import static com.nvidia.cuvs.lucene.TestUtils.generateDataset;
 import static com.nvidia.cuvs.lucene.TestUtils.generateRandomVector;
+import static com.nvidia.cuvs.lucene.TestUtils.generateRandomVectors;
 
 import java.io.IOException;
 import java.util.ArrayList;
@@ -50,27 +50,47 @@ public class TestAcceleratedHNSWDeletedDocuments extends LuceneTestCase {
   static final Codec codec =
       TestUtil.alwaysKnnVectorsFormat(new Lucene99AcceleratedHNSWVectorsFormat());
   private static Random random;
+  private static int datasetSize;
+  private static int dimensions;
+  private static int topK;
+  private static float deletionProbability;
+  private static float vectorProbability;
+  private static float[][] dataset;
 
   @BeforeClass
   public static void beforeClass() throws Exception {
-    assumeTrue("cuVS not supported", Lucene99AcceleratedHNSWVectorsFormat.supported());
+    assumeTrue(
+        "cuVS not supported so skipping these tests",
+        Lucene99AcceleratedHNSWVectorsFormat.supported());
     random = random();
+    datasetSize = random.nextInt(200, 1000);
+    dimensions = random.nextInt(8, 256);
+    topK = Math.min(random.nextInt(20) + 5, datasetSize / 2);
+    deletionProbability = random.nextFloat() * 0.4f + 0.1f;
+    dataset = generateRandomVectors(random, datasetSize, dimensions);
+    vectorProbability = random.nextFloat() * 0.5f + 0.3f;
+    log.log(
+        Level.FINE,
+        "Dataset size: "
+            + datasetSize
+            + "x"
+            + dimensions
+            + ", topK: "
+            + topK
+            + ", deletion probability: "
+            + deletionProbability
+            + ", vector probability: "
+            + vectorProbability);
   }
 
   @Test
   public void testVectorSearchWithDeletedDocuments() throws IOException {
 
     try (Directory directory = newDirectory()) {
-      int datasetSize = random.nextInt(200, 1000); // 200-1200 documents
-      int dimensions = random.nextInt(64, 256); // 64-320 dimensions
-      int topK = Math.min(random.nextInt(20) + 5, datasetSize / 2); // 5-25 results
-      float deletionProbability = random.nextFloat() * 0.4f + 0.1f; // 10-50% deletion rate
-
-      float[][] dataset = generateDataset(random, datasetSize, dimensions);
       Set<Integer> deletedDocs = new HashSet<>();
 
       // Create index with all documents having vectors
-      try (RandomIndexWriter writer = createWriter(directory)) {
+      try (RandomIndexWriter writer = createWriter(random, directory)) {
         for (int i = 0; i < datasetSize; i++) {
           Document doc = new Document();
           doc.add(new StringField("id", String.valueOf(i), Field.Store.YES));
@@ -89,6 +109,8 @@ public class TestAcceleratedHNSWDeletedDocuments extends LuceneTestCase {
         writer.commit();
       }
 
+      log.log(Level.FINE, "Number of documents deleted: " + deletedDocs.size());
+
       // Search and verify deleted documents are not returned
       try (DirectoryReader reader = DirectoryReader.open(directory)) {
         IndexSearcher searcher = newSearcher(reader);
@@ -103,8 +125,7 @@ public class TestAcceleratedHNSWDeletedDocuments extends LuceneTestCase {
 
         // Verify no deleted documents in results
         for (ScoreDoc hit : hits) {
-          String docId = reader.storedFields().document(hit.doc).get("id");
-          int id = Integer.parseInt(docId);
+          int id = Integer.parseInt(reader.storedFields().document(hit.doc).get("id"));
           assertFalse(
               "Deleted document " + id + " should not appear in results", deletedDocs.contains(id));
           log.log(Level.FINE, "Found non-deleted document: " + id + ", Score: " + hit.score);
@@ -127,18 +148,11 @@ public class TestAcceleratedHNSWDeletedDocuments extends LuceneTestCase {
   public void testVectorSearchWithMixedDeletedAndMissingVectors() throws IOException {
 
     try (Directory directory = newDirectory()) {
-      int datasetSize = random.nextInt(200) + 50; // 50-250 documents
-      int dimensions = random.nextInt(256) + 64; // 64-320 dimensions
-      int topK = Math.min(random.nextInt(20) + 5, datasetSize / 2); // 5-25 results
-      float vectorProbability = random.nextFloat() * 0.5f + 0.3f; // 30-80% have vectors
-      float deletionProbability = random.nextFloat() * 0.3f + 0.1f; // 10-40% deletion rate
-
-      float[][] dataset = generateDataset(random, datasetSize, dimensions);
       Set<Integer> docsWithoutVectors = new HashSet<>();
       Set<Integer> deletedDocs = new HashSet<>();
 
       // Create index with mixed documents
-      try (RandomIndexWriter writer = createWriter(directory)) {
+      try (RandomIndexWriter writer = createWriter(random, directory)) {
         for (int i = 0; i < datasetSize; i++) {
           Document doc = new Document();
           doc.add(new StringField("id", String.valueOf(i), Field.Store.YES));
@@ -166,6 +180,13 @@ public class TestAcceleratedHNSWDeletedDocuments extends LuceneTestCase {
         writer.commit();
       }
 
+      log.log(
+          Level.FINE,
+          " Documents deleted: "
+              + deletedDocs.size()
+              + " Documents without vectors: "
+              + docsWithoutVectors.size());
+
       // Test vector search behavior
       try (DirectoryReader reader = DirectoryReader.open(directory)) {
         IndexSearcher searcher = newSearcher(reader);
@@ -176,8 +197,7 @@ public class TestAcceleratedHNSWDeletedDocuments extends LuceneTestCase {
 
         // Verify results
         for (ScoreDoc hit : hits) {
-          String docId = reader.storedFields().document(hit.doc).get("id");
-          int id = Integer.parseInt(docId);
+          int id = Integer.parseInt(reader.storedFields().document(hit.doc).get("id"));
           assertFalse("Deleted document should not appear", deletedDocs.contains(id));
           assertFalse("Document without vector should not appear", docsWithoutVectors.contains(id));
           log.log(Level.FINE, "Found document with vector: " + id + ", Score: " + hit.score);
@@ -204,14 +224,9 @@ public class TestAcceleratedHNSWDeletedDocuments extends LuceneTestCase {
   public void testVectorSearchAfterAllDocumentsDeleted() throws IOException {
 
     try (Directory directory = newDirectory()) {
-      int datasetSize = random.nextInt(20) + 5; // 5-25 documents for this test
-      int dimensions = random.nextInt(128) + 32; // 32-160 dimensions
-      int topK = Math.min(random.nextInt(10) + 5, datasetSize); // 5-15 results
-
-      float[][] dataset = generateDataset(random, datasetSize, dimensions);
-
       // Create and delete all documents
-      try (IndexWriter writer = new IndexWriter(directory, createWriterConfig())) {
+      try (IndexWriter writer = new IndexWriter(directory, createWriterConfig(random))) {
+        // Add all documents
         for (int i = 0; i < datasetSize; i++) {
           Document doc = new Document();
           doc.add(new StringField("id", String.valueOf(i), Field.Store.YES));
@@ -249,17 +264,12 @@ public class TestAcceleratedHNSWDeletedDocuments extends LuceneTestCase {
   public void testVectorSearchWithPartialDeletionAndReindexing() throws IOException {
 
     try (Directory directory = newDirectory()) {
-      int datasetSize = random.nextInt(200) + 50; // 50-250 documents
-      int dimensions = random.nextInt(256) + 64; // 64-320 dimensions
-      int topK = Math.min(random.nextInt(20) + 5, datasetSize / 2); // 5-25 results
-      float deletionProbability = random.nextFloat() * 0.3f + 0.1f; // 10-40% deletion rate
-
-      float[][] dataset = generateDataset(random, datasetSize, dimensions);
+      float[][] dataset = generateRandomVectors(random, datasetSize, dimensions);
       List<Integer> activeDocIds = new ArrayList<>();
 
       // Initial indexing
-      try (IndexWriter writer = new IndexWriter(directory, createWriterConfig())) {
-        int initialDocs = datasetSize / 2 + random.nextInt(datasetSize / 4); // 50-75% of dataset
+      try (IndexWriter writer = new IndexWriter(directory, createWriterConfig(random))) {
+        int initialDocs = datasetSize / 2 + random.nextInt(datasetSize / 4);
         for (int i = 0; i < initialDocs; i++) {
           Document doc = new Document();
           doc.add(new StringField("id", String.valueOf(i), Field.Store.YES));
@@ -300,8 +310,7 @@ public class TestAcceleratedHNSWDeletedDocuments extends LuceneTestCase {
 
         Set<Integer> resultIds = new HashSet<>();
         for (ScoreDoc hit : hits) {
-          String docId = reader.storedFields().document(hit.doc).get("id");
-          int id = Integer.parseInt(docId);
+          int id = Integer.parseInt(reader.storedFields().document(hit.doc).get("id"));
           resultIds.add(id);
           assertTrue("Result should be from active documents", activeDocIds.contains(id));
         }
@@ -317,17 +326,17 @@ public class TestAcceleratedHNSWDeletedDocuments extends LuceneTestCase {
     }
   }
 
-  private RandomIndexWriter createWriter(Directory directory) throws IOException {
+  private RandomIndexWriter createWriter(Random random, Directory directory) throws IOException {
     return new RandomIndexWriter(
-        random(),
+        random,
         directory,
-        newIndexWriterConfig(new MockAnalyzer(random(), MockTokenizer.SIMPLE, true))
+        newIndexWriterConfig(new MockAnalyzer(random, MockTokenizer.SIMPLE, true))
             .setCodec(codec)
             .setMergePolicy(newTieredMergePolicy()));
   }
 
-  private IndexWriterConfig createWriterConfig() {
-    return newIndexWriterConfig(new MockAnalyzer(random(), MockTokenizer.SIMPLE, true))
+  private IndexWriterConfig createWriterConfig(Random random) {
+    return newIndexWriterConfig(new MockAnalyzer(random, MockTokenizer.SIMPLE, true))
         .setCodec(codec)
         .setMergePolicy(newTieredMergePolicy());
   }
