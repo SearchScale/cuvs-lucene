@@ -4,17 +4,18 @@
  */
 package com.nvidia.cuvs.lucene;
 
-import static com.nvidia.cuvs.lucene.TestUtils.generateDataset;
+import static com.nvidia.cuvs.lucene.TestUtils.createWriter;
+import static com.nvidia.cuvs.lucene.TestUtils.generateExpectedResults;
+import static com.nvidia.cuvs.lucene.TestUtils.generateRandomVector;
+import static com.nvidia.cuvs.lucene.TestUtils.generateRandomVectors;
 import static org.apache.lucene.index.VectorSimilarityFunction.EUCLIDEAN;
 
 import com.nvidia.cuvs.CagraIndexParams.CagraGraphBuildAlgo;
 import java.io.File;
-import java.io.IOException;
-import java.lang.reflect.InvocationTargetException;
 import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.util.Arrays;
-import java.util.HashSet;
+import java.util.List;
 import java.util.Random;
 import java.util.UUID;
 import java.util.logging.Level;
@@ -37,6 +38,7 @@ import org.apache.lucene.search.ScoreDoc;
 import org.apache.lucene.search.TopDocs;
 import org.apache.lucene.store.Directory;
 import org.apache.lucene.store.FSDirectory;
+import org.apache.lucene.tests.index.RandomIndexWriter;
 import org.apache.lucene.tests.util.LuceneTestCase;
 import org.apache.lucene.tests.util.LuceneTestCase.SuppressSysoutChecks;
 import org.junit.After;
@@ -44,66 +46,59 @@ import org.junit.Before;
 import org.junit.Test;
 
 @SuppressSysoutChecks(bugUrl = "")
-public class TestCagraToHnswSerializationAndSearch extends LuceneTestCase {
+public class TestAcceleratedHNSW extends LuceneTestCase {
 
-  private static Logger log =
-      Logger.getLogger(TestCagraToHnswSerializationAndSearch.class.getName());
+  private static Logger log = Logger.getLogger(TestAcceleratedHNSW.class.getName());
   private static Random random;
   private static Path indexDirPath;
+  private static int datasetSize;
+  private static int dimensions;
+  private static int topK;
+  private static float[][] dataset;
+  private static float[][] dataset2;
+  private static String randomID;
+  private static Codec codec;
+
+  private final String ID_FIELD = "id";
+  private final String VECTOR_FIELD = "vector_field";
+  private final String VECTOR_FIELD2 = "vector_field2";
 
   @Before
   public void beforeTest() throws Exception {
-    assumeTrue("cuVS not supported", Lucene99AcceleratedHNSWVectorsFormat.supported());
-    // Fixed seed so that we can validate against the same result.
-    random = new Random(222);
+    assumeTrue(
+        "cuVS not supported so skipping these tests",
+        Lucene99AcceleratedHNSWVectorsFormat.supported());
+    random = new Random();
     indexDirPath = Paths.get(UUID.randomUUID().toString());
+    datasetSize = random.nextInt(200, 1000);
+    dimensions = random.nextInt(8, 256);
+    topK = Math.min(random.nextInt(20) + 5, datasetSize / 2);
+    dataset = generateRandomVectors(random, datasetSize, dimensions);
+    dataset2 = generateRandomVectors(random, datasetSize, dimensions);
+    randomID = UUID.randomUUID().toString();
+    codec =
+        new Lucene101AcceleratedHNSWCodec(32, 128, 64, CagraGraphBuildAlgo.NN_DESCENT, 3, 16, 100);
+    log.log(Level.FINE, "Dataset size: " + datasetSize + "x" + dimensions + ", topK: " + topK);
   }
 
   @Test
-  public void testCagraToHnswSerializationAndSearch()
-      throws IOException,
-          ClassNotFoundException,
-          NoSuchMethodException,
-          SecurityException,
-          InstantiationException,
-          IllegalAccessException,
-          IllegalArgumentException,
-          InvocationTargetException {
-    Codec codec =
-        new Lucene101AcceleratedHNSWCodec(32, 128, 64, CagraGraphBuildAlgo.NN_DESCENT, 3, 16, 100);
-    IndexWriterConfig config = new IndexWriterConfig().setCodec(codec).setUseCompoundFile(false);
-
-    final int COMMIT_FREQ = 2000;
-    final String ID_FIELD = "id";
-    final String VECTOR_FIELD = "vector_field";
-
-    int numDocs = 2000;
-    int dimension = 32;
-    int topK = 5;
-    int count = COMMIT_FREQ;
-    float[][] dataset = generateDataset(random, numDocs, dimension);
-
+  public void testAcceleratedHNSW() throws Exception {
     // Indexing
     try (Directory indexDirectory = FSDirectory.open(indexDirPath);
-        IndexWriter indexWriter = new IndexWriter(indexDirectory, config)) {
-      for (int i = 0; i < numDocs; i++) {
+        RandomIndexWriter indexWriter = createWriter(random, indexDirectory, codec)) {
+      for (int i = 0; i < datasetSize; i++) {
         Document document = new Document();
         document.add(new StringField(ID_FIELD, Integer.toString(i), Field.Store.YES));
         document.add(new KnnFloatVectorField(VECTOR_FIELD, dataset[i], EUCLIDEAN));
+        document.add(new KnnFloatVectorField(VECTOR_FIELD2, dataset2[i], EUCLIDEAN));
         indexWriter.addDocument(document);
-        count -= 1;
-        if (count == 0) {
-          indexWriter.commit();
-          count = COMMIT_FREQ;
-        }
       }
+      indexWriter.commit();
     }
 
     // Searching
     try (Directory indexDirectory = FSDirectory.open(indexDirPath);
         DirectoryReader reader = DirectoryReader.open(indexDirectory)) {
-      log.log(Level.FINE, "Successfully opened index");
-
       int vectorCount = 0;
       for (LeafReaderContext leafReaderContext : reader.leaves()) {
         LeafReader leafReader = leafReaderContext.reader();
@@ -118,27 +113,27 @@ public class TestCagraToHnswSerializationAndSearch extends LuceneTestCase {
                 + knnValues.dimension()
                 + " dimensions");
         vectorCount += knnValues.size();
-        assertTrue("Vector dimension mismatch", knnValues.dimension() == dimension);
+        assertTrue("Vector dimension mismatch", knnValues.dimension() == dimensions);
       }
-      assertTrue("Dataset size mismatch", vectorCount == numDocs);
+      assertTrue("Dataset size mismatch", vectorCount == datasetSize);
 
       log.log(Level.FINE, "Testing vector search queries...");
       IndexSearcher searcher = new IndexSearcher(reader);
 
-      float[] queryVector = generateDataset(random, 1, dimension)[0];
-      log.log(Level.FINE, "Query vector: " + Arrays.toString(queryVector));
+      float[] queryVector = generateRandomVectors(random, 1, dimensions)[0];
+      log.log(Level.FINER, "Query vector: " + Arrays.toString(queryVector));
 
       KnnFloatVectorQuery query = new KnnFloatVectorQuery(VECTOR_FIELD, queryVector, topK);
       TopDocs results = searcher.search(query, topK);
 
       log.log(Level.FINE, "Search results (" + results.totalHits + " total hits):");
-      Integer[] expected = new Integer[] {1869, 1803, 1302, 59, 1497, 108, 1411, 351, 1982};
-      HashSet<Integer> expectedIds = new HashSet<Integer>(Arrays.asList(expected));
+      List<List<Integer>> expected =
+          generateExpectedResults(topK, dataset, new float[][] {queryVector});
 
       for (int i = 0; i < results.scoreDocs.length; i++) {
         ScoreDoc scoreDoc = results.scoreDocs[i];
         Document doc = searcher.storedFields().document(scoreDoc.doc);
-        String id = doc.get(ID_FIELD);
+        int id = Integer.valueOf(doc.get(ID_FIELD));
         log.log(
             Level.FINE,
             "  Rank "
@@ -149,8 +144,7 @@ public class TestCagraToHnswSerializationAndSearch extends LuceneTestCase {
                 + id
                 + "), score="
                 + scoreDoc.score);
-        assertTrue(
-            "Id: " + id + " expected but not found", expectedIds.contains(Integer.valueOf(id)));
+        assertTrue("Id: " + id + " expected but not found", expected.get(0).contains(id));
       }
       assertTrue("TopK results not returned", results.scoreDocs.length == topK);
     }
@@ -158,27 +152,14 @@ public class TestCagraToHnswSerializationAndSearch extends LuceneTestCase {
 
   @Test
   public void testSingleVectorIndex() throws Exception {
-    // Test single vector index support with dummy HNSW graph
-    // TODO: This test can be removed once https://github.com/rapidsai/cuvs/pull/1256 is merged
-    // and CAGRA natively supports single vector indexes
-    Codec codec = new Lucene101AcceleratedHNSWCodec();
-
-    final String ID_FIELD = "id";
-    final String VECTOR_FIELD = "vector_field";
-
-    int dimension = 32;
-    float[] vector = generateDataset(random, 1, dimension)[0];
-
-    // Index a single document with a vector - this should now work with dummy HNSW graph
     try (Directory indexDirectory = newDirectory()) {
+      float[] vector = generateRandomVector(random, dimensions);
       IndexWriterConfig config = new IndexWriterConfig().setCodec(codec).setUseCompoundFile(false);
       try (IndexWriter indexWriter = new IndexWriter(indexDirectory, config)) {
         Document document = new Document();
-        document.add(new StringField(ID_FIELD, "0", Field.Store.YES));
+        document.add(new StringField(ID_FIELD, randomID, Field.Store.YES));
         document.add(new KnnFloatVectorField(VECTOR_FIELD, vector, EUCLIDEAN));
         indexWriter.addDocument(document);
-
-        // This should now succeed by creating a dummy HNSW graph for the single vector
         indexWriter.commit();
       }
 
@@ -189,7 +170,7 @@ public class TestCagraToHnswSerializationAndSearch extends LuceneTestCase {
         FloatVectorValues knnValues = leafReader.getFloatVectorValues(VECTOR_FIELD);
         assertNotNull(knnValues);
         assertEquals(1, knnValues.size());
-        assertEquals(dimension, knnValues.dimension());
+        assertEquals(dimensions, knnValues.dimension());
 
         // Test search functionality
         IndexSearcher searcher = new IndexSearcher(reader);
@@ -197,7 +178,7 @@ public class TestCagraToHnswSerializationAndSearch extends LuceneTestCase {
         TopDocs results = searcher.search(query, 1);
         assertEquals(1, results.totalHits.value());
         assertEquals(1, results.scoreDocs.length);
-        assertEquals(0, results.scoreDocs[0].doc);
+        assertEquals(randomID, reader.storedFields().document(results.scoreDocs[0].doc).get("id"));
       }
     }
   }
