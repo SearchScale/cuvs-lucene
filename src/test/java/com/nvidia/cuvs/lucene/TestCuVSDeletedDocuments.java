@@ -54,18 +54,21 @@ public class TestCuVSDeletedDocuments extends LuceneTestCase {
   private static float vectorProbability;
   private static float[] queryVector;
 
-  private final String ID_FIELD = "id";
-  private final String VECTOR_FIELD = "vector_field";
-  private final String CATEGORY_FIELD = "category_field";
+  private static final String ID_FIELD = "id";
+  private static final String VECTOR_FIELD = "vector_field";
+  private static final String CATEGORY_FIELD = "category_field";
+  private static final int DATASET_SIZE_LIMIT = 1000;
+  private static final int DIMENSIONS_LIMIT = 256;
+  private static final int TOP_K_LIMIT = 64;
 
   @BeforeClass
   public static void beforeClass() throws Exception {
     assumeTrue("cuVS not supported so skipping these tests", CuVS2510GPUVectorsFormat.supported());
     random = random();
     codec = TestUtil.alwaysKnnVectorsFormat(new CuVS2510GPUVectorsFormat());
-    datasetSize = random.nextInt(200, 1000);
-    dimensions = random.nextInt(8, 256);
-    topK = Math.min(random.nextInt(20) + 5, datasetSize / 2);
+    datasetSize = random.nextInt(200, DATASET_SIZE_LIMIT);
+    dimensions = random.nextInt(8, DIMENSIONS_LIMIT);
+    topK = Math.min(random.nextInt(2, TOP_K_LIMIT), datasetSize);
     dataset = generateRandomVectors(random, datasetSize, dimensions);
     deletionProbability = random.nextFloat() * 0.4f + 0.1f;
     vectorProbability = random.nextFloat() * 0.5f + 0.3f;

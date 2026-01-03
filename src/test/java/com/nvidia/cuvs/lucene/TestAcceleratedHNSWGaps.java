@@ -42,14 +42,6 @@ import org.junit.Test;
 public class TestAcceleratedHNSWGaps extends LuceneTestCase {
 
   private static Logger log = Logger.getLogger(TestAcceleratedHNSWGaps.class.getName());
-
-  private static final int DATASET_SIZE_LIMIT = 1000;
-  private static final int DIMENSIONS_LIMIT = 256;
-  private static final int TOP_K_LIMIT = 64;
-  private static final String ID_FIELD = "id";
-  private static final String TEXT_FIELD = "some_text_field";
-  private static final String VECTOR_FIELD = "vector_field";
-
   private static Codec codec;
   private static IndexSearcher searcher;
   private static IndexReader reader;
@@ -59,6 +51,13 @@ public class TestAcceleratedHNSWGaps extends LuceneTestCase {
   private static int dimensions;
   private static int topK;
   private static float[][] dataset;
+
+  private static final int DATASET_SIZE_LIMIT = 1000;
+  private static final int DIMENSIONS_LIMIT = 256;
+  private static final int TOP_K_LIMIT = 64;
+  private static final String ID_FIELD = "id";
+  private static final String TEXT_FIELD = "some_text_field";
+  private static final String VECTOR_FIELD = "vector_field";
 
   @BeforeClass
   public static void beforeClass() throws Exception {

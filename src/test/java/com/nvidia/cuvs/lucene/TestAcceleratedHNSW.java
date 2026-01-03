@@ -59,9 +59,12 @@ public class TestAcceleratedHNSW extends LuceneTestCase {
   private static String randomID;
   private static Codec codec;
 
-  private final String ID_FIELD = "id";
-  private final String VECTOR_FIELD = "vector_field";
-  private final String VECTOR_FIELD2 = "vector_field2";
+  private static final String ID_FIELD = "id";
+  private static final String VECTOR_FIELD = "vector_field";
+  private static final String VECTOR_FIELD2 = "vector_field2";
+  private static final int DATASET_SIZE_LIMIT = 1000;
+  private static final int DIMENSIONS_LIMIT = 256;
+  private static final int TOP_K_LIMIT = 64;
 
   @Before
   public void beforeTest() throws Exception {
@@ -70,9 +73,9 @@ public class TestAcceleratedHNSW extends LuceneTestCase {
         Lucene99AcceleratedHNSWVectorsFormat.supported());
     random = new Random();
     indexDirPath = Paths.get(UUID.randomUUID().toString());
-    datasetSize = random.nextInt(200, 1000);
-    dimensions = random.nextInt(8, 256);
-    topK = Math.min(random.nextInt(20) + 5, datasetSize / 2);
+    datasetSize = random.nextInt(200, DATASET_SIZE_LIMIT);
+    dimensions = random.nextInt(8, DIMENSIONS_LIMIT);
+    topK = Math.min(random.nextInt(2, TOP_K_LIMIT), datasetSize);
     dataset = generateRandomVectors(random, datasetSize, dimensions);
     dataset2 = generateRandomVectors(random, datasetSize, dimensions);
     randomID = UUID.randomUUID().toString();

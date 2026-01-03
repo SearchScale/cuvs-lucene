@@ -51,10 +51,10 @@ public class TestAcceleratedHNSWRandomizedSearch extends LuceneTestCase {
   private static int datasetSize;
   private static int dimensions;
   private static int topK;
+  private static int numQueries;
   private static float[][] dataset;
   private static float[][] dataset2;
   private static float[] queryVector;
-  private static int numQueries;
 
   private static final String ID_FIELD = "id";
   private static final String TEXT_FIELD = "some_text_field";

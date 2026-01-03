@@ -43,11 +43,8 @@ import org.junit.Test;
 @SuppressSysoutChecks(bugUrl = "")
 public class TestAcceleratedHNSWDeletedDocuments extends LuceneTestCase {
 
-  protected static Logger log =
-      Logger.getLogger(TestAcceleratedHNSWDeletedDocuments.class.getName());
-
-  static final Codec codec =
-      TestUtil.alwaysKnnVectorsFormat(new Lucene99AcceleratedHNSWVectorsFormat());
+  private static Logger log = Logger.getLogger(TestAcceleratedHNSWDeletedDocuments.class.getName());
+  private static Codec codec;
   private static Random random;
   private static int datasetSize;
   private static int dimensions;
@@ -56,15 +53,23 @@ public class TestAcceleratedHNSWDeletedDocuments extends LuceneTestCase {
   private static float vectorProbability;
   private static float[][] dataset;
 
+  private static final String ID_FIELD = "id";
+  private static final String VECTOR_FIELD = "vector_field";
+  private static final String CATEGORY_FIELD = "category_field";
+  private static final int DATASET_SIZE_LIMIT = 1000;
+  private static final int DIMENSIONS_LIMIT = 256;
+  private static final int TOP_K_LIMIT = 64;
+
   @BeforeClass
   public static void beforeClass() throws Exception {
     assumeTrue(
         "cuVS not supported so skipping these tests",
         Lucene99AcceleratedHNSWVectorsFormat.supported());
+    codec = TestUtil.alwaysKnnVectorsFormat(new Lucene99AcceleratedHNSWVectorsFormat());
     random = random();
-    datasetSize = random.nextInt(200, 1000);
-    dimensions = random.nextInt(8, 256);
-    topK = Math.min(random.nextInt(20) + 5, datasetSize / 2);
+    datasetSize = random.nextInt(200, DATASET_SIZE_LIMIT);
+    dimensions = random.nextInt(8, DIMENSIONS_LIMIT);
+    topK = Math.min(random.nextInt(2, TOP_K_LIMIT), datasetSize);
     deletionProbability = random.nextFloat() * 0.4f + 0.1f;
     dataset = generateRandomVectors(random, datasetSize, dimensions);
     vectorProbability = random.nextFloat() * 0.5f + 0.3f;
@@ -92,16 +97,17 @@ public class TestAcceleratedHNSWDeletedDocuments extends LuceneTestCase {
       try (RandomIndexWriter writer = createWriter(random, directory, codec)) {
         for (int i = 0; i < datasetSize; i++) {
           Document doc = new Document();
-          doc.add(new StringField("id", String.valueOf(i), Field.Store.YES));
+          doc.add(new StringField(ID_FIELD, String.valueOf(i), Field.Store.YES));
           doc.add(
-              new KnnFloatVectorField("vector", dataset[i], VectorSimilarityFunction.EUCLIDEAN));
+              new KnnFloatVectorField(
+                  VECTOR_FIELD, dataset[i], VectorSimilarityFunction.EUCLIDEAN));
           writer.addDocument(doc);
         }
 
         // Delete documents randomly based on probability
         for (int i = 0; i < datasetSize; i++) {
           if (random.nextFloat() < deletionProbability) {
-            writer.deleteDocuments(new Term("id", String.valueOf(i)));
+            writer.deleteDocuments(new Term(ID_FIELD, String.valueOf(i)));
             deletedDocs.add(i);
           }
         }
@@ -116,7 +122,7 @@ public class TestAcceleratedHNSWDeletedDocuments extends LuceneTestCase {
         // Use a random vector for query
         float[] queryVector = generateRandomVector(random, dimensions);
 
-        Query query = new KnnFloatVectorQuery("vector", queryVector, topK);
+        Query query = new KnnFloatVectorQuery(VECTOR_FIELD, queryVector, topK);
         ScoreDoc[] hits = searcher.search(query, topK).scoreDocs;
 
         // Verify we got results
@@ -124,7 +130,7 @@ public class TestAcceleratedHNSWDeletedDocuments extends LuceneTestCase {
 
         // Verify no deleted documents in results
         for (ScoreDoc hit : hits) {
-          int id = Integer.parseInt(reader.storedFields().document(hit.doc).get("id"));
+          int id = Integer.parseInt(reader.storedFields().document(hit.doc).get(ID_FIELD));
           assertFalse(
               "Deleted document " + id + " should not appear in results", deletedDocs.contains(id));
           log.log(Level.FINE, "Found non-deleted document: " + id + ", Score: " + hit.score);
@@ -133,7 +139,7 @@ public class TestAcceleratedHNSWDeletedDocuments extends LuceneTestCase {
         // Verify deleted documents are truly deleted
         for (int deletedId : deletedDocs) {
           TopDocs result =
-              searcher.search(new TermQuery(new Term("id", String.valueOf(deletedId))), 1);
+              searcher.search(new TermQuery(new Term(ID_FIELD, String.valueOf(deletedId))), 1);
           assertEquals(
               "Deleted document " + deletedId + " should not be found",
               0,
@@ -154,15 +160,16 @@ public class TestAcceleratedHNSWDeletedDocuments extends LuceneTestCase {
       try (RandomIndexWriter writer = createWriter(random, directory, codec)) {
         for (int i = 0; i < datasetSize; i++) {
           Document doc = new Document();
-          doc.add(new StringField("id", String.valueOf(i), Field.Store.YES));
+          doc.add(new StringField(ID_FIELD, String.valueOf(i), Field.Store.YES));
           // Randomly assign categories
           String category = random.nextBoolean() ? "A" : "B";
-          doc.add(new StringField("category", category, Field.Store.YES));
+          doc.add(new StringField(CATEGORY_FIELD, category, Field.Store.YES));
 
           // Randomly decide whether to add vectors
           if (random.nextFloat() < vectorProbability) {
             doc.add(
-                new KnnFloatVectorField("vector", dataset[i], VectorSimilarityFunction.EUCLIDEAN));
+                new KnnFloatVectorField(
+                    VECTOR_FIELD, dataset[i], VectorSimilarityFunction.EUCLIDEAN));
           } else {
             docsWithoutVectors.add(i);
           }
@@ -172,7 +179,7 @@ public class TestAcceleratedHNSWDeletedDocuments extends LuceneTestCase {
         // Delete documents randomly
         for (int i = 0; i < datasetSize; i++) {
           if (random.nextFloat() < deletionProbability) {
-            writer.deleteDocuments(new Term("id", String.valueOf(i)));
+            writer.deleteDocuments(new Term(ID_FIELD, String.valueOf(i)));
             deletedDocs.add(i);
           }
         }
@@ -191,27 +198,27 @@ public class TestAcceleratedHNSWDeletedDocuments extends LuceneTestCase {
         IndexSearcher searcher = newSearcher(reader);
         float[] queryVector = generateRandomVector(random, dimensions);
 
-        Query query = new KnnFloatVectorQuery("vector", queryVector, topK);
+        Query query = new KnnFloatVectorQuery(VECTOR_FIELD, queryVector, topK);
         ScoreDoc[] hits = searcher.search(query, topK).scoreDocs;
 
         // Verify results
         for (ScoreDoc hit : hits) {
-          int id = Integer.parseInt(reader.storedFields().document(hit.doc).get("id"));
+          int id = Integer.parseInt(reader.storedFields().document(hit.doc).get(ID_FIELD));
           assertFalse("Deleted document should not appear", deletedDocs.contains(id));
           assertFalse("Document without vector should not appear", docsWithoutVectors.contains(id));
           log.log(Level.FINE, "Found document with vector: " + id + ", Score: " + hit.score);
         }
 
         // Test filtered search with deletions
-        Query filter = new TermQuery(new Term("category", "A"));
-        Query filteredQuery = new KnnFloatVectorQuery("vector", queryVector, topK, filter);
+        Query filter = new TermQuery(new Term(CATEGORY_FIELD, "A"));
+        Query filteredQuery = new KnnFloatVectorQuery(VECTOR_FIELD, queryVector, topK, filter);
         ScoreDoc[] filteredHits = searcher.search(filteredQuery, topK).scoreDocs;
 
         for (ScoreDoc hit : filteredHits) {
           Document doc = reader.storedFields().document(hit.doc);
-          String category = doc.get("category");
+          String category = doc.get(CATEGORY_FIELD);
           assertEquals("Should only match category A", "A", category);
-          int id = Integer.parseInt(doc.get("id"));
+          int id = Integer.parseInt(doc.get(ID_FIELD));
           assertFalse(
               "Deleted document should not appear in filtered results", deletedDocs.contains(id));
         }
@@ -228,19 +235,20 @@ public class TestAcceleratedHNSWDeletedDocuments extends LuceneTestCase {
         // Add all documents
         for (int i = 0; i < datasetSize; i++) {
           Document doc = new Document();
-          doc.add(new StringField("id", String.valueOf(i), Field.Store.YES));
+          doc.add(new StringField(ID_FIELD, String.valueOf(i), Field.Store.YES));
           doc.add(
-              new KnnFloatVectorField("vector", dataset[i], VectorSimilarityFunction.EUCLIDEAN));
+              new KnnFloatVectorField(
+                  VECTOR_FIELD, dataset[i], VectorSimilarityFunction.EUCLIDEAN));
           writer.addDocument(doc);
         }
         writer.commit();
 
         // Delete all documents
         for (int i = 0; i < datasetSize; i++) {
-          writer.deleteDocuments(new Term("id", String.valueOf(i)));
+          writer.deleteDocuments(new Term(ID_FIELD, String.valueOf(i)));
         }
         writer.commit();
-        writer.forceMerge(1); // Force merge to apply deletions
+        writer.forceMerge(1);
       }
 
       // Verify search returns no results
@@ -248,7 +256,7 @@ public class TestAcceleratedHNSWDeletedDocuments extends LuceneTestCase {
         IndexSearcher searcher = newSearcher(reader);
         float[] queryVector = generateRandomVector(random, dimensions);
 
-        Query query = new KnnFloatVectorQuery("vector", queryVector, topK);
+        Query query = new KnnFloatVectorQuery(VECTOR_FIELD, queryVector, topK);
         TopDocs results = searcher.search(query, topK);
 
         assertEquals(
@@ -271,9 +279,10 @@ public class TestAcceleratedHNSWDeletedDocuments extends LuceneTestCase {
         int initialDocs = datasetSize / 2 + random.nextInt(datasetSize / 4);
         for (int i = 0; i < initialDocs; i++) {
           Document doc = new Document();
-          doc.add(new StringField("id", String.valueOf(i), Field.Store.YES));
+          doc.add(new StringField(ID_FIELD, String.valueOf(i), Field.Store.YES));
           doc.add(
-              new KnnFloatVectorField("vector", dataset[i], VectorSimilarityFunction.EUCLIDEAN));
+              new KnnFloatVectorField(
+                  VECTOR_FIELD, dataset[i], VectorSimilarityFunction.EUCLIDEAN));
           writer.addDocument(doc);
           activeDocIds.add(i);
         }
@@ -282,7 +291,7 @@ public class TestAcceleratedHNSWDeletedDocuments extends LuceneTestCase {
         List<Integer> candidatesForDeletion = new ArrayList<>(activeDocIds);
         for (int docId : candidatesForDeletion) {
           if (random.nextFloat() < deletionProbability) {
-            writer.deleteDocuments(new Term("id", String.valueOf(docId)));
+            writer.deleteDocuments(new Term(ID_FIELD, String.valueOf(docId)));
             activeDocIds.remove(Integer.valueOf(docId));
           }
         }
@@ -290,9 +299,10 @@ public class TestAcceleratedHNSWDeletedDocuments extends LuceneTestCase {
         // Add new documents with higher IDs
         for (int i = initialDocs; i < datasetSize; i++) {
           Document doc = new Document();
-          doc.add(new StringField("id", String.valueOf(i), Field.Store.YES));
+          doc.add(new StringField(ID_FIELD, String.valueOf(i), Field.Store.YES));
           doc.add(
-              new KnnFloatVectorField("vector", dataset[i], VectorSimilarityFunction.EUCLIDEAN));
+              new KnnFloatVectorField(
+                  VECTOR_FIELD, dataset[i], VectorSimilarityFunction.EUCLIDEAN));
           writer.addDocument(doc);
           activeDocIds.add(i);
         }
@@ -304,12 +314,12 @@ public class TestAcceleratedHNSWDeletedDocuments extends LuceneTestCase {
         IndexSearcher searcher = newSearcher(reader);
         float[] queryVector = generateRandomVector(random, dimensions);
 
-        Query query = new KnnFloatVectorQuery("vector", queryVector, topK);
+        Query query = new KnnFloatVectorQuery(VECTOR_FIELD, queryVector, topK);
         ScoreDoc[] hits = searcher.search(query, topK).scoreDocs;
 
         Set<Integer> resultIds = new HashSet<>();
         for (ScoreDoc hit : hits) {
-          int id = Integer.parseInt(reader.storedFields().document(hit.doc).get("id"));
+          int id = Integer.parseInt(reader.storedFields().document(hit.doc).get(ID_FIELD));
           resultIds.add(id);
           assertTrue("Result should be from active documents", activeDocIds.contains(id));
         }
