@@ -16,6 +16,7 @@ import java.util.TreeMap;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 import org.apache.lucene.codecs.Codec;
+import org.apache.lucene.index.IndexWriterConfig;
 import org.apache.lucene.store.Directory;
 import org.apache.lucene.tests.analysis.MockAnalyzer;
 import org.apache.lucene.tests.analysis.MockTokenizer;
@@ -81,6 +82,26 @@ public class TestUtils {
     return neighborsResult;
   }
 
+  public static List<Integer> calculateExpectedTopK(float[] query, int topK, float[][] dataset) {
+    Map<Integer, Double> distances = new TreeMap<>();
+
+    // Calculate distances only for documents that have vectors (even-numbered)
+    for (int i = 0; i < dataset.length; i += 2) {
+      double distance = 0;
+      for (int j = 0; j < dataset[0].length; j++) {
+        distance += (query[j] - dataset[i][j]) * (query[j] - dataset[i][j]);
+      }
+      distances.put(i, distance);
+    }
+
+    // Sort by distance and return top-k
+    return distances.entrySet().stream()
+        .sorted(Map.Entry.comparingByValue())
+        .map(Map.Entry::getKey)
+        .limit(topK)
+        .toList();
+  }
+
   public static RandomIndexWriter createWriter(Random random, Directory directory, Codec codec)
       throws IOException {
     return new RandomIndexWriter(
@@ -89,5 +110,11 @@ public class TestUtils {
         newIndexWriterConfig(new MockAnalyzer(random, MockTokenizer.SIMPLE, true))
             .setCodec(codec)
             .setMergePolicy(newTieredMergePolicy()));
+  }
+
+  public static IndexWriterConfig createWriterConfig(Random random, Codec codec) {
+    return newIndexWriterConfig(new MockAnalyzer(random, MockTokenizer.SIMPLE, true))
+        .setCodec(codec)
+        .setMergePolicy(newTieredMergePolicy());
   }
 }
