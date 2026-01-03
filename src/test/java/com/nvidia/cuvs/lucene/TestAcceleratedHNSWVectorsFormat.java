@@ -26,7 +26,11 @@ import org.junit.BeforeClass;
 import org.junit.Ignore;
 
 @SuppressSysoutChecks(bugUrl = "")
-public class TestLucene99AcceleratedHNSWVectorsFormat extends BaseKnnVectorsFormatTestCase {
+public class TestAcceleratedHNSWVectorsFormat extends BaseKnnVectorsFormatTestCase {
+
+  private final String ID_FIELD = "id";
+  private final String VECTOR_FIELD = "vector_field";
+  private final String VECTOR_FIELD2 = "vector_field2";
 
   @BeforeClass
   public static void beforeClass() {
@@ -41,27 +45,32 @@ public class TestLucene99AcceleratedHNSWVectorsFormat extends BaseKnnVectorsForm
   }
 
   public void testMergeTwoSegsWithASingleDocPerSeg() throws Exception {
-    float[][] f = new float[][] {randomVector(384), randomVector(384)};
+    final int numDocs = 2;
+    final int dimension = 256;
+    float[][] vectors = new float[numDocs][dimension];
+
+    for (int i = 0; i < numDocs; i++) {
+      vectors[i] = randomVector(dimension);
+    }
+
     try (Directory dir = newDirectory();
         IndexWriter w = new IndexWriter(dir, newIndexWriterConfig())) {
-      Document doc1 = new Document();
-      doc1.add(new StringField("id", "0", Field.Store.NO));
-      doc1.add(new KnnFloatVectorField("f", f[0], EUCLIDEAN));
-      w.addDocument(doc1);
-      w.commit();
-      Document doc2 = new Document();
-      doc2.add(new StringField("id", "1", Field.Store.NO));
-      doc2.add(new KnnFloatVectorField("f", f[1], EUCLIDEAN));
-      w.addDocument(doc2);
-      w.flush();
-      w.commit();
+
+      for (int i = 0; i < numDocs; i++) {
+        Document doc = new Document();
+        doc.add(new StringField(ID_FIELD, String.valueOf(i), Field.Store.YES));
+        doc.add(new KnnFloatVectorField(VECTOR_FIELD, vectors[i], EUCLIDEAN));
+        w.addDocument(doc);
+        w.commit();
+      }
 
       // sanity - verify one doc per leaf
       try (DirectoryReader reader = DirectoryReader.open(w)) {
         List<LeafReaderContext> subReaders = reader.leaves();
-        assertEquals(2, subReaders.size());
-        assertEquals(1, subReaders.get(0).reader().getFloatVectorValues("f").size());
-        assertEquals(1, subReaders.get(1).reader().getFloatVectorValues("f").size());
+        assertEquals(numDocs, subReaders.size());
+        for (int i = 0; i < numDocs; i++) {
+          assertEquals(1, subReaders.get(i).reader().getFloatVectorValues(VECTOR_FIELD).size());
+        }
       }
 
       // now merge to a single segment
@@ -70,49 +79,61 @@ public class TestLucene99AcceleratedHNSWVectorsFormat extends BaseKnnVectorsForm
       // verify merged content
       try (DirectoryReader reader = DirectoryReader.open(w)) {
         LeafReader r = getOnlyLeafReader(reader);
-        FloatVectorValues values = r.getFloatVectorValues("f");
+        FloatVectorValues values = r.getFloatVectorValues(VECTOR_FIELD);
         assertNotNull(values);
-        assertEquals(2, values.size());
-        assertArrayEquals(f[0], values.vectorValue(0), 0.0f);
-        assertArrayEquals(f[1], values.vectorValue(1), 0.0f);
+        assertEquals(numDocs, values.size());
+        for (int i = 0; i < numDocs; i++) {
+          assertArrayEquals(vectors[i], values.vectorValue(i), 0.0f);
+        }
       }
     }
   }
 
   // Basic test for multiple vectors fields per document
   public void testTwoVectorFieldsPerDoc() throws Exception {
-    float[][] f1 = new float[][] {randomVector(384), randomVector(384)};
-    float[][] f2 = new float[][] {randomVector(384), randomVector(384)};
+
+    final int numDocs = 2;
+    final int dimension = 256;
+    float[][] vectors1 = new float[numDocs][dimension];
+    float[][] vectors2 = new float[numDocs][dimension];
+
+    for (int i = 0; i < numDocs; i++) {
+      vectors1[i] = randomVector(dimension);
+      vectors2[i] = randomVector(dimension);
+    }
+
     try (Directory dir = newDirectory();
         IndexWriter w = new IndexWriter(dir, newIndexWriterConfig())) {
-      Document doc1 = new Document();
-      doc1.add(new StringField("id", "0", Field.Store.NO));
-      doc1.add(new KnnFloatVectorField("f1", f1[0], EUCLIDEAN));
-      doc1.add(new KnnFloatVectorField("f2", f2[0], EUCLIDEAN));
-      w.addDocument(doc1);
-      Document doc2 = new Document();
-      doc2.add(new StringField("id", "1", Field.Store.NO));
-      doc2.add(new KnnFloatVectorField("f1", f1[1], EUCLIDEAN));
-      doc2.add(new KnnFloatVectorField("f2", f2[1], EUCLIDEAN));
-      w.addDocument(doc2);
+
+      for (int i = 0; i < numDocs; i++) {
+        Document doc = new Document();
+        doc.add(new StringField(ID_FIELD, String.valueOf(i), Field.Store.YES));
+        doc.add(new KnnFloatVectorField(VECTOR_FIELD, vectors1[i], EUCLIDEAN));
+        doc.add(new KnnFloatVectorField(VECTOR_FIELD2, vectors2[i], EUCLIDEAN));
+        w.addDocument(doc);
+      }
+
       w.forceMerge(1);
 
       try (DirectoryReader reader = DirectoryReader.open(w)) {
         LeafReader r = getOnlyLeafReader(reader);
-        FloatVectorValues values = r.getFloatVectorValues("f1");
-        assertNotNull(values);
-        assertEquals(2, values.size());
-        assertArrayEquals(f1[0], values.vectorValue(0), 0.0f);
-        assertArrayEquals(f1[1], values.vectorValue(1), 0.0f);
 
-        values = r.getFloatVectorValues("f2");
-        assertNotNull(values);
-        assertEquals(2, values.size());
-        assertArrayEquals(f2[0], values.vectorValue(0), 0.0f);
-        assertArrayEquals(f2[1], values.vectorValue(1), 0.0f);
+        for (int i = 0; i < numDocs; i++) {
+          FloatVectorValues values = r.getFloatVectorValues(VECTOR_FIELD);
+          assertNotNull(values);
+          assertEquals(2, values.size());
+          assertArrayEquals(vectors1[i], values.vectorValue(i), 0.0f);
+        }
 
-        // opportunistically check boundary condition - search with a 0 topK
-        var topDocs = r.searchNearestVectors("f1", randomVector(384), 0, null, 10);
+        for (int i = 0; i < numDocs; i++) {
+          FloatVectorValues values = r.getFloatVectorValues(VECTOR_FIELD2);
+          assertNotNull(values);
+          assertEquals(2, values.size());
+          assertArrayEquals(vectors2[i], values.vectorValue(i), 0.0f);
+        }
+
+        // Check boundary condition - search with a 0 topK
+        var topDocs = r.searchNearestVectors(VECTOR_FIELD, randomVector(dimension), 0, null, 10);
         assertEquals(0, topDocs.scoreDocs.length);
         assertEquals(0, topDocs.totalHits.value());
       }
