@@ -51,20 +51,9 @@ public class TestAcceleratedHNSW extends LuceneTestCase {
   private static Logger log = Logger.getLogger(TestAcceleratedHNSW.class.getName());
   private static Random random;
   private static Path indexDirPath;
-  private static int datasetSize;
-  private static int dimensions;
-  private static int topK;
-  private static float[][] dataset;
-  private static float[][] dataset2;
   private static String randomID;
   private static Codec codec;
-
-  private static final String ID_FIELD = "id";
-  private static final String VECTOR_FIELD = "vector_field";
-  private static final String VECTOR_FIELD2 = "vector_field2";
-  private static final int DATASET_SIZE_LIMIT = 1000;
-  private static final int DIMENSIONS_LIMIT = 256;
-  private static final int TOP_K_LIMIT = 64;
+  private static TestDataProvider testDataProvider;
 
   @Before
   public void beforeTest() throws Exception {
@@ -73,15 +62,10 @@ public class TestAcceleratedHNSW extends LuceneTestCase {
         Lucene99AcceleratedHNSWVectorsFormat.supported());
     random = new Random();
     indexDirPath = Paths.get(UUID.randomUUID().toString());
-    datasetSize = random.nextInt(200, DATASET_SIZE_LIMIT);
-    dimensions = random.nextInt(8, DIMENSIONS_LIMIT);
-    topK = Math.min(random.nextInt(2, TOP_K_LIMIT), datasetSize);
-    dataset = generateRandomVectors(random, datasetSize, dimensions);
-    dataset2 = generateRandomVectors(random, datasetSize, dimensions);
     randomID = UUID.randomUUID().toString();
+    testDataProvider = new TestDataProvider(random);
     codec =
         new Lucene101AcceleratedHNSWCodec(32, 128, 64, CagraGraphBuildAlgo.NN_DESCENT, 3, 16, 100);
-    log.log(Level.FINE, "Dataset size: " + datasetSize + "x" + dimensions + ", topK: " + topK);
   }
 
   @Test
@@ -89,11 +73,16 @@ public class TestAcceleratedHNSW extends LuceneTestCase {
     // Indexing
     try (Directory indexDirectory = FSDirectory.open(indexDirPath);
         RandomIndexWriter indexWriter = createWriter(random, indexDirectory, codec)) {
-      for (int i = 0; i < datasetSize; i++) {
+      for (int i = 0; i < testDataProvider.getDatasetSize(); i++) {
         Document document = new Document();
-        document.add(new StringField(ID_FIELD, Integer.toString(i), Field.Store.YES));
-        document.add(new KnnFloatVectorField(VECTOR_FIELD, dataset[i], EUCLIDEAN));
-        document.add(new KnnFloatVectorField(VECTOR_FIELD2, dataset2[i], EUCLIDEAN));
+        document.add(
+            new StringField(TestDataProvider.ID_FIELD, Integer.toString(i), Field.Store.YES));
+        document.add(
+            new KnnFloatVectorField(
+                TestDataProvider.VECTOR_FIELD, testDataProvider.getDataset()[i], EUCLIDEAN));
+        document.add(
+            new KnnFloatVectorField(
+                TestDataProvider.VECTOR_FIELD2, testDataProvider.getDataset2()[i], EUCLIDEAN));
         indexWriter.addDocument(document);
       }
       indexWriter.commit();
@@ -105,38 +94,45 @@ public class TestAcceleratedHNSW extends LuceneTestCase {
       int vectorCount = 0;
       for (LeafReaderContext leafReaderContext : reader.leaves()) {
         LeafReader leafReader = leafReaderContext.reader();
-        FloatVectorValues knnValues = leafReader.getFloatVectorValues(VECTOR_FIELD);
+        FloatVectorValues knnValues =
+            leafReader.getFloatVectorValues(TestDataProvider.VECTOR_FIELD);
         assertNotNull(knnValues);
         log.log(
             Level.FINE,
-            VECTOR_FIELD
+            TestDataProvider.VECTOR_FIELD
                 + " field: "
                 + knnValues.size()
                 + " vectors, "
                 + knnValues.dimension()
                 + " dimensions");
         vectorCount += knnValues.size();
-        assertTrue("Vector dimension mismatch", knnValues.dimension() == dimensions);
+        assertTrue(
+            "Vector dimension mismatch", knnValues.dimension() == testDataProvider.getDimensions());
       }
-      assertTrue("Dataset size mismatch", vectorCount == datasetSize);
+      assertTrue("Dataset size mismatch", vectorCount == testDataProvider.getDatasetSize());
 
       log.log(Level.FINE, "Testing vector search queries...");
       IndexSearcher searcher = new IndexSearcher(reader);
 
-      float[] queryVector = generateRandomVectors(random, 1, dimensions)[0];
+      float[] queryVector = generateRandomVectors(random, 1, testDataProvider.getDimensions())[0];
       log.log(Level.FINER, "Query vector: " + Arrays.toString(queryVector));
 
-      KnnFloatVectorQuery query = new KnnFloatVectorQuery(VECTOR_FIELD, queryVector, topK);
-      TopDocs results = searcher.search(query, topK);
+      KnnFloatVectorQuery query =
+          new KnnFloatVectorQuery(
+              TestDataProvider.VECTOR_FIELD, queryVector, testDataProvider.getTopK());
+      TopDocs results = searcher.search(query, testDataProvider.getTopK());
 
       log.log(Level.FINE, "Search results (" + results.totalHits + " total hits):");
       List<List<Integer>> expected =
-          generateExpectedResults(topK, dataset, new float[][] {queryVector});
+          generateExpectedResults(
+              testDataProvider.getTopK(),
+              testDataProvider.getDataset(),
+              new float[][] {queryVector});
 
       for (int i = 0; i < results.scoreDocs.length; i++) {
         ScoreDoc scoreDoc = results.scoreDocs[i];
         Document doc = searcher.storedFields().document(scoreDoc.doc);
-        int id = Integer.valueOf(doc.get(ID_FIELD));
+        int id = Integer.valueOf(doc.get(TestDataProvider.ID_FIELD));
         log.log(
             Level.FINE,
             "  Rank "
@@ -149,19 +145,20 @@ public class TestAcceleratedHNSW extends LuceneTestCase {
                 + scoreDoc.score);
         assertTrue("Id: " + id + " expected but not found", expected.get(0).contains(id));
       }
-      assertTrue("TopK results not returned", results.scoreDocs.length == topK);
+      assertTrue(
+          "TopK results not returned", results.scoreDocs.length == testDataProvider.getTopK());
     }
   }
 
   @Test
   public void testSingleVectorIndex() throws Exception {
     try (Directory indexDirectory = newDirectory()) {
-      float[] vector = generateRandomVector(random, dimensions);
+      float[] vector = generateRandomVector(random, testDataProvider.getDimensions());
       IndexWriterConfig config = new IndexWriterConfig().setCodec(codec).setUseCompoundFile(false);
       try (IndexWriter indexWriter = new IndexWriter(indexDirectory, config)) {
         Document document = new Document();
-        document.add(new StringField(ID_FIELD, randomID, Field.Store.YES));
-        document.add(new KnnFloatVectorField(VECTOR_FIELD, vector, EUCLIDEAN));
+        document.add(new StringField(TestDataProvider.ID_FIELD, randomID, Field.Store.YES));
+        document.add(new KnnFloatVectorField(TestDataProvider.VECTOR_FIELD, vector, EUCLIDEAN));
         indexWriter.addDocument(document);
         indexWriter.commit();
       }
@@ -170,14 +167,16 @@ public class TestAcceleratedHNSW extends LuceneTestCase {
       try (DirectoryReader reader = DirectoryReader.open(indexDirectory)) {
         assertEquals(1, reader.numDocs());
         LeafReader leafReader = getOnlyLeafReader(reader);
-        FloatVectorValues knnValues = leafReader.getFloatVectorValues(VECTOR_FIELD);
+        FloatVectorValues knnValues =
+            leafReader.getFloatVectorValues(TestDataProvider.VECTOR_FIELD);
         assertNotNull(knnValues);
         assertEquals(1, knnValues.size());
-        assertEquals(dimensions, knnValues.dimension());
+        assertEquals(testDataProvider.getDimensions(), knnValues.dimension());
 
         // Test search functionality
         IndexSearcher searcher = new IndexSearcher(reader);
-        KnnFloatVectorQuery query = new KnnFloatVectorQuery(VECTOR_FIELD, vector, 1);
+        KnnFloatVectorQuery query =
+            new KnnFloatVectorQuery(TestDataProvider.VECTOR_FIELD, vector, 1);
         TopDocs results = searcher.search(query, 1);
         assertEquals(1, results.totalHits.value());
         assertEquals(1, results.scoreDocs.length);
