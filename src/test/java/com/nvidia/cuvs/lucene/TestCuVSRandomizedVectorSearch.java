@@ -6,6 +6,7 @@ package com.nvidia.cuvs.lucene;
 
 import static com.nvidia.cuvs.lucene.TestUtils.generateQueries;
 import static com.nvidia.cuvs.lucene.TestUtils.generateRandomVectors;
+import static org.apache.lucene.index.VectorSimilarityFunction.EUCLIDEAN;
 
 import java.io.IOException;
 import java.util.ArrayList;
@@ -85,8 +86,8 @@ public class TestCuVSRandomizedVectorSearch extends LuceneTestCase {
               < 4; // some documents won't have vectors to test deleted/missing vectors
       if (!skipVector
           || datasetSize < 100) { // about 10th of the documents shouldn't have a single vector
-        doc.add(new KnnFloatVectorField("vector", dataset[i], VectorSimilarityFunction.EUCLIDEAN));
-        doc.add(new KnnFloatVectorField("vector2", dataset[i], VectorSimilarityFunction.EUCLIDEAN));
+        doc.add(new KnnFloatVectorField("vector", dataset[i], EUCLIDEAN));
+        doc.add(new KnnFloatVectorField("vector2", dataset[i], EUCLIDEAN));
       }
 
       writer.addDocument(doc);

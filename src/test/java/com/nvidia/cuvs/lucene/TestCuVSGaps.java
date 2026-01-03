@@ -9,6 +9,7 @@ import static com.nvidia.cuvs.lucene.TestDataProvider.TEXT_FIELD;
 import static com.nvidia.cuvs.lucene.TestDataProvider.VECTOR_FIELD1;
 import static com.nvidia.cuvs.lucene.TestUtils.calculateExpectedTopK;
 import static com.nvidia.cuvs.lucene.TestUtils.createWriter;
+import static org.apache.lucene.index.VectorSimilarityFunction.EUCLIDEAN;
 
 import java.io.IOException;
 import java.util.List;
@@ -69,7 +70,7 @@ public class TestCuVSGaps extends LuceneTestCase {
       // Only add vectors to even-numbered documents
       if (i % 2 == 0) {
         doc.add(
-            new KnnFloatVectorField(VECTOR_FIELD1, dataset[i], VectorSimilarityFunction.EUCLIDEAN));
+            new KnnFloatVectorField(VECTOR_FIELD1, dataset[i], EUCLIDEAN));
       }
       writer.addDocument(doc);
     }

@@ -9,6 +9,7 @@ import static com.nvidia.cuvs.lucene.TestDataProvider.ID_FIELD;
 import static com.nvidia.cuvs.lucene.TestDataProvider.VECTOR_FIELD1;
 import static com.nvidia.cuvs.lucene.TestUtils.createWriter;
 import static com.nvidia.cuvs.lucene.TestUtils.createWriterConfig;
+import static org.apache.lucene.index.VectorSimilarityFunction.EUCLIDEAN;
 
 import java.io.IOException;
 import java.util.ArrayList;
@@ -84,7 +85,7 @@ public class TestAcceleratedHNSWDeletedDocuments extends LuceneTestCase {
           doc.add(new StringField(ID_FIELD, String.valueOf(i), Field.Store.YES));
           doc.add(
               new KnnFloatVectorField(
-                  VECTOR_FIELD1, dataset[i], VectorSimilarityFunction.EUCLIDEAN));
+                  VECTOR_FIELD1, dataset[i], EUCLIDEAN));
           writer.addDocument(doc);
         }
 
@@ -157,7 +158,7 @@ public class TestAcceleratedHNSWDeletedDocuments extends LuceneTestCase {
           if (random.nextFloat() < vectorProbability) {
             doc.add(
                 new KnnFloatVectorField(
-                    VECTOR_FIELD1, dataset[i], VectorSimilarityFunction.EUCLIDEAN));
+                    VECTOR_FIELD1, dataset[i], EUCLIDEAN));
           } else {
             docsWithoutVectors.add(i);
           }
@@ -230,7 +231,7 @@ public class TestAcceleratedHNSWDeletedDocuments extends LuceneTestCase {
           doc.add(new StringField(ID_FIELD, String.valueOf(i), Field.Store.YES));
           doc.add(
               new KnnFloatVectorField(
-                  VECTOR_FIELD1, dataset[i], VectorSimilarityFunction.EUCLIDEAN));
+                  VECTOR_FIELD1, dataset[i], EUCLIDEAN));
           writer.addDocument(doc);
         }
         writer.commit();
@@ -277,7 +278,7 @@ public class TestAcceleratedHNSWDeletedDocuments extends LuceneTestCase {
           doc.add(new StringField(ID_FIELD, String.valueOf(i), Field.Store.YES));
           doc.add(
               new KnnFloatVectorField(
-                  VECTOR_FIELD1, dataset[i], VectorSimilarityFunction.EUCLIDEAN));
+                  VECTOR_FIELD1, dataset[i], EUCLIDEAN));
           writer.addDocument(doc);
           activeDocIds.add(i);
         }
@@ -297,7 +298,7 @@ public class TestAcceleratedHNSWDeletedDocuments extends LuceneTestCase {
           doc.add(new StringField(ID_FIELD, String.valueOf(i), Field.Store.YES));
           doc.add(
               new KnnFloatVectorField(
-                  VECTOR_FIELD1, dataset[i], VectorSimilarityFunction.EUCLIDEAN));
+                  VECTOR_FIELD1, dataset[i], EUCLIDEAN));
           writer.addDocument(doc);
           activeDocIds.add(i);
         }
