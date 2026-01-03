@@ -177,7 +177,8 @@ public class TestAcceleratedHNSW extends LuceneTestCase {
         TopDocs results = searcher.search(query, 1);
         assertEquals(1, results.totalHits.value());
         assertEquals(1, results.scoreDocs.length);
-        assertEquals(randomID, reader.storedFields().document(results.scoreDocs[0].doc).get("id"));
+        Document doc = reader.storedFields().document(results.scoreDocs[0].doc);
+        assertEquals(randomID, doc.get(ID_FIELD));
       }
     }
   }

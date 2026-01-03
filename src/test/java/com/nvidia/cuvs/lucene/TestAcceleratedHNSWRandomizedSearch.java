@@ -143,7 +143,7 @@ public class TestAcceleratedHNSWRandomizedSearch extends LuceneTestCase {
 
     // Verify that all results match the filter
     for (ScoreDoc hit : filteredHits) {
-      String docId = reader.storedFields().document(hit.doc).get("id");
+      String docId = reader.storedFields().document(hit.doc).get(ID_FIELD);
       assertEquals("All results should match the filter", targetDocId, docId);
     }
 
