@@ -23,7 +23,6 @@ import org.apache.lucene.document.KnnFloatVectorField;
 import org.apache.lucene.document.StringField;
 import org.apache.lucene.index.IndexReader;
 import org.apache.lucene.index.Term;
-import org.apache.lucene.index.VectorSimilarityFunction;
 import org.apache.lucene.search.IndexSearcher;
 import org.apache.lucene.search.Query;
 import org.apache.lucene.search.ScoreDoc;
@@ -69,8 +68,7 @@ public class TestCuVSGaps extends LuceneTestCase {
 
       // Only add vectors to even-numbered documents
       if (i % 2 == 0) {
-        doc.add(
-            new KnnFloatVectorField(VECTOR_FIELD1, dataset[i], EUCLIDEAN));
+        doc.add(new KnnFloatVectorField(VECTOR_FIELD1, dataset[i], EUCLIDEAN));
       }
       writer.addDocument(doc);
     }

@@ -27,7 +27,6 @@ import org.apache.lucene.document.StringField;
 import org.apache.lucene.index.DirectoryReader;
 import org.apache.lucene.index.IndexWriter;
 import org.apache.lucene.index.Term;
-import org.apache.lucene.index.VectorSimilarityFunction;
 import org.apache.lucene.search.IndexSearcher;
 import org.apache.lucene.search.Query;
 import org.apache.lucene.search.ScoreDoc;
@@ -86,9 +85,7 @@ public class TestCuVSDeletedDocuments extends LuceneTestCase {
         for (int i = 0; i < datasetSize; i++) {
           Document doc = new Document();
           doc.add(new StringField(ID_FIELD, String.valueOf(i), Field.Store.YES));
-          doc.add(
-              new KnnFloatVectorField(
-                  VECTOR_FIELD1, dataset[i], EUCLIDEAN));
+          doc.add(new KnnFloatVectorField(VECTOR_FIELD1, dataset[i], EUCLIDEAN));
           writer.addDocument(doc);
         }
         writer.commit();
@@ -159,9 +156,7 @@ public class TestCuVSDeletedDocuments extends LuceneTestCase {
 
           // Randomly decide whether to add vectors
           if (random.nextFloat() < vectorProbability) {
-            doc.add(
-                new KnnFloatVectorField(
-                    VECTOR_FIELD1, dataset[i], EUCLIDEAN));
+            doc.add(new KnnFloatVectorField(VECTOR_FIELD1, dataset[i], EUCLIDEAN));
           } else {
             docsWithoutVectors.add(i);
           }
@@ -228,9 +223,7 @@ public class TestCuVSDeletedDocuments extends LuceneTestCase {
         for (int i = 0; i < datasetSize; i++) {
           Document doc = new Document();
           doc.add(new StringField(ID_FIELD, String.valueOf(i), Field.Store.YES));
-          doc.add(
-              new KnnFloatVectorField(
-                  VECTOR_FIELD1, dataset[i], EUCLIDEAN));
+          doc.add(new KnnFloatVectorField(VECTOR_FIELD1, dataset[i], EUCLIDEAN));
           writer.addDocument(doc);
         }
         writer.commit();
@@ -274,9 +267,7 @@ public class TestCuVSDeletedDocuments extends LuceneTestCase {
         for (int i = 0; i < initialDocs; i++) {
           Document doc = new Document();
           doc.add(new StringField(ID_FIELD, String.valueOf(i), Field.Store.YES));
-          doc.add(
-              new KnnFloatVectorField(
-                  VECTOR_FIELD1, dataset[i], EUCLIDEAN));
+          doc.add(new KnnFloatVectorField(VECTOR_FIELD1, dataset[i], EUCLIDEAN));
           writer.addDocument(doc);
           activeDocIds.add(i);
         }
@@ -294,9 +285,7 @@ public class TestCuVSDeletedDocuments extends LuceneTestCase {
         for (int i = initialDocs; i < datasetSize; i++) {
           Document doc = new Document();
           doc.add(new StringField(ID_FIELD, String.valueOf(i), Field.Store.YES));
-          doc.add(
-              new KnnFloatVectorField(
-                  VECTOR_FIELD1, dataset[i], EUCLIDEAN));
+          doc.add(new KnnFloatVectorField(VECTOR_FIELD1, dataset[i], EUCLIDEAN));
           writer.addDocument(doc);
           activeDocIds.add(i);
         }
