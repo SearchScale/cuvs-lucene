@@ -4,10 +4,11 @@
  */
 package com.nvidia.cuvs.lucene;
 
+import static com.nvidia.cuvs.lucene.TestDataProvider.ID_FIELD;
+import static com.nvidia.cuvs.lucene.TestDataProvider.TEXT_FIELD;
+import static com.nvidia.cuvs.lucene.TestDataProvider.VECTOR_FIELD1;
 import static com.nvidia.cuvs.lucene.TestUtils.calculateExpectedTopK;
 import static com.nvidia.cuvs.lucene.TestUtils.createWriter;
-import static com.nvidia.cuvs.lucene.TestUtils.generateRandomVector;
-import static com.nvidia.cuvs.lucene.TestUtils.generateRandomVectors;
 
 import java.io.IOException;
 import java.util.List;
@@ -47,17 +48,7 @@ public class TestAcceleratedHNSWGaps extends LuceneTestCase {
   private static IndexReader reader;
   private static Directory directory;
   private static Random random;
-  private static int datasetSize;
-  private static int dimensions;
-  private static int topK;
-  private static float[][] dataset;
-
-  private static final int DATASET_SIZE_LIMIT = 1000;
-  private static final int DIMENSIONS_LIMIT = 256;
-  private static final int TOP_K_LIMIT = 64;
-  private static final String ID_FIELD = "id";
-  private static final String TEXT_FIELD = "some_text_field";
-  private static final String VECTOR_FIELD = "vector_field";
+  private static TestDataProvider dataProvider;
 
   @BeforeClass
   public static void beforeClass() throws Exception {
@@ -67,14 +58,10 @@ public class TestAcceleratedHNSWGaps extends LuceneTestCase {
     codec = TestUtil.alwaysKnnVectorsFormat(new Lucene99AcceleratedHNSWVectorsFormat());
     directory = newDirectory();
     random = random();
+    dataProvider = new TestDataProvider(random);
     RandomIndexWriter writer = createWriter(random, directory, codec);
-
-    datasetSize = random.nextInt(100, DATASET_SIZE_LIMIT);
-    dimensions = random.nextInt(8, DIMENSIONS_LIMIT);
-    dataset = generateRandomVectors(random, datasetSize, dimensions);
-    topK = Math.min(random.nextInt(2, TOP_K_LIMIT), datasetSize);
-
-    log.log(Level.FINE, "Dataset size: " + datasetSize + "x" + dimensions + ", topK: " + topK);
+    int datasetSize = dataProvider.getDatasetSize();
+    float[][] dataset = dataProvider.getDataset1();
 
     // Create documents where only even-numbered documents have vectors
     for (int i = 0; i < datasetSize; i++) {
@@ -85,7 +72,7 @@ public class TestAcceleratedHNSWGaps extends LuceneTestCase {
       // Only add vectors to even-numbered documents
       if (i % 2 == 0) {
         doc.add(
-            new KnnFloatVectorField(VECTOR_FIELD, dataset[i], VectorSimilarityFunction.EUCLIDEAN));
+            new KnnFloatVectorField(VECTOR_FIELD1, dataset[i], VectorSimilarityFunction.EUCLIDEAN));
       }
 
       writer.addDocument(doc);
@@ -98,8 +85,12 @@ public class TestAcceleratedHNSWGaps extends LuceneTestCase {
 
   @Test
   public void testVectorSearchWithAlternatingDocuments() throws IOException {
-    float[] queryVector = generateRandomVector(random, dimensions);
-    Query query = new KnnFloatVectorQuery(VECTOR_FIELD, queryVector, topK);
+
+    float[][] dataset = dataProvider.getDataset1();
+    int topK = dataProvider.getTopK();
+    float[] queryVector = dataProvider.getQueries(1)[0];
+
+    Query query = new KnnFloatVectorQuery(VECTOR_FIELD1, queryVector, topK);
 
     // Perform search
     ScoreDoc[] hits = searcher.search(query, topK).scoreDocs;
@@ -127,12 +118,15 @@ public class TestAcceleratedHNSWGaps extends LuceneTestCase {
 
   @Test
   public void testVectorSearchWithFilterAndAlternatingDocuments() throws IOException {
-    float[] queryVector = generateRandomVector(random, dimensions);
+
+    int datasetSize = dataProvider.getDatasetSize();
+    int topK = dataProvider.getTopK();
+    float[] queryVector = dataProvider.getQueries(1)[0];
 
     String randomEvenInRange = String.valueOf(random.nextInt(datasetSize / 2 + 1) * 2);
     log.log(Level.FINE, "Randomly chosen even value is: " + randomEvenInRange);
     Query filter = new TermQuery(new Term(ID_FIELD, randomEvenInRange));
-    Query filteredQuery = new KnnFloatVectorQuery(VECTOR_FIELD, queryVector, topK, filter);
+    Query filteredQuery = new KnnFloatVectorQuery(VECTOR_FIELD1, queryVector, topK, filter);
     ScoreDoc[] filteredHits = searcher.search(filteredQuery, topK).scoreDocs;
 
     // Should only get document (the only one that matches the filter and has a vector)

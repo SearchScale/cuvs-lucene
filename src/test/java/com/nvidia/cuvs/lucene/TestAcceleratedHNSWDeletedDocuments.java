@@ -4,10 +4,11 @@
  */
 package com.nvidia.cuvs.lucene;
 
+import static com.nvidia.cuvs.lucene.TestDataProvider.CATEGORY_FIELD;
+import static com.nvidia.cuvs.lucene.TestDataProvider.ID_FIELD;
+import static com.nvidia.cuvs.lucene.TestDataProvider.VECTOR_FIELD1;
 import static com.nvidia.cuvs.lucene.TestUtils.createWriter;
 import static com.nvidia.cuvs.lucene.TestUtils.createWriterConfig;
-import static com.nvidia.cuvs.lucene.TestUtils.generateRandomVector;
-import static com.nvidia.cuvs.lucene.TestUtils.generateRandomVectors;
 
 import java.io.IOException;
 import java.util.ArrayList;
@@ -46,19 +47,9 @@ public class TestAcceleratedHNSWDeletedDocuments extends LuceneTestCase {
   private static Logger log = Logger.getLogger(TestAcceleratedHNSWDeletedDocuments.class.getName());
   private static Codec codec;
   private static Random random;
-  private static int datasetSize;
-  private static int dimensions;
-  private static int topK;
   private static float deletionProbability;
   private static float vectorProbability;
-  private static float[][] dataset;
-
-  private static final String ID_FIELD = "id";
-  private static final String VECTOR_FIELD = "vector_field";
-  private static final String CATEGORY_FIELD = "category_field";
-  private static final int DATASET_SIZE_LIMIT = 1000;
-  private static final int DIMENSIONS_LIMIT = 256;
-  private static final int TOP_K_LIMIT = 64;
+  private static TestDataProvider dataProvider;
 
   @BeforeClass
   public static void beforeClass() throws Exception {
@@ -67,21 +58,12 @@ public class TestAcceleratedHNSWDeletedDocuments extends LuceneTestCase {
         Lucene99AcceleratedHNSWVectorsFormat.supported());
     codec = TestUtil.alwaysKnnVectorsFormat(new Lucene99AcceleratedHNSWVectorsFormat());
     random = random();
-    datasetSize = random.nextInt(200, DATASET_SIZE_LIMIT);
-    dimensions = random.nextInt(8, DIMENSIONS_LIMIT);
-    topK = Math.min(random.nextInt(2, TOP_K_LIMIT), datasetSize);
+    dataProvider = new TestDataProvider(random);
     deletionProbability = random.nextFloat() * 0.4f + 0.1f;
-    dataset = generateRandomVectors(random, datasetSize, dimensions);
     vectorProbability = random.nextFloat() * 0.5f + 0.3f;
     log.log(
         Level.FINE,
-        "Dataset size: "
-            + datasetSize
-            + "x"
-            + dimensions
-            + ", topK: "
-            + topK
-            + ", deletion probability: "
+        "deletion probability: "
             + deletionProbability
             + ", vector probability: "
             + vectorProbability);
@@ -92,6 +74,8 @@ public class TestAcceleratedHNSWDeletedDocuments extends LuceneTestCase {
 
     try (Directory directory = newDirectory()) {
       Set<Integer> deletedDocs = new HashSet<>();
+      int datasetSize = dataProvider.getDatasetSize();
+      float[][] dataset = dataProvider.getDataset1();
 
       // Create index with all documents having vectors
       try (RandomIndexWriter writer = createWriter(random, directory, codec)) {
@@ -100,7 +84,7 @@ public class TestAcceleratedHNSWDeletedDocuments extends LuceneTestCase {
           doc.add(new StringField(ID_FIELD, String.valueOf(i), Field.Store.YES));
           doc.add(
               new KnnFloatVectorField(
-                  VECTOR_FIELD, dataset[i], VectorSimilarityFunction.EUCLIDEAN));
+                  VECTOR_FIELD1, dataset[i], VectorSimilarityFunction.EUCLIDEAN));
           writer.addDocument(doc);
         }
 
@@ -120,9 +104,9 @@ public class TestAcceleratedHNSWDeletedDocuments extends LuceneTestCase {
       try (DirectoryReader reader = DirectoryReader.open(directory)) {
         IndexSearcher searcher = newSearcher(reader);
         // Use a random vector for query
-        float[] queryVector = generateRandomVector(random, dimensions);
-
-        Query query = new KnnFloatVectorQuery(VECTOR_FIELD, queryVector, topK);
+        float[] queryVector = dataProvider.getQueries(1)[0];
+        int topK = dataProvider.getTopK();
+        Query query = new KnnFloatVectorQuery(VECTOR_FIELD1, queryVector, topK);
         ScoreDoc[] hits = searcher.search(query, topK).scoreDocs;
 
         // Verify we got results
@@ -155,6 +139,10 @@ public class TestAcceleratedHNSWDeletedDocuments extends LuceneTestCase {
     try (Directory directory = newDirectory()) {
       Set<Integer> docsWithoutVectors = new HashSet<>();
       Set<Integer> deletedDocs = new HashSet<>();
+      int datasetSize = dataProvider.getDatasetSize();
+      float[][] dataset = dataProvider.getDataset1();
+      int topK = dataProvider.getTopK();
+      float[] queryVector = dataProvider.getQueries(1)[0];
 
       // Create index with mixed documents
       try (RandomIndexWriter writer = createWriter(random, directory, codec)) {
@@ -169,7 +157,7 @@ public class TestAcceleratedHNSWDeletedDocuments extends LuceneTestCase {
           if (random.nextFloat() < vectorProbability) {
             doc.add(
                 new KnnFloatVectorField(
-                    VECTOR_FIELD, dataset[i], VectorSimilarityFunction.EUCLIDEAN));
+                    VECTOR_FIELD1, dataset[i], VectorSimilarityFunction.EUCLIDEAN));
           } else {
             docsWithoutVectors.add(i);
           }
@@ -196,9 +184,8 @@ public class TestAcceleratedHNSWDeletedDocuments extends LuceneTestCase {
       // Test vector search behavior
       try (DirectoryReader reader = DirectoryReader.open(directory)) {
         IndexSearcher searcher = newSearcher(reader);
-        float[] queryVector = generateRandomVector(random, dimensions);
 
-        Query query = new KnnFloatVectorQuery(VECTOR_FIELD, queryVector, topK);
+        Query query = new KnnFloatVectorQuery(VECTOR_FIELD1, queryVector, topK);
         ScoreDoc[] hits = searcher.search(query, topK).scoreDocs;
 
         // Verify results
@@ -211,7 +198,7 @@ public class TestAcceleratedHNSWDeletedDocuments extends LuceneTestCase {
 
         // Test filtered search with deletions
         Query filter = new TermQuery(new Term(CATEGORY_FIELD, "A"));
-        Query filteredQuery = new KnnFloatVectorQuery(VECTOR_FIELD, queryVector, topK, filter);
+        Query filteredQuery = new KnnFloatVectorQuery(VECTOR_FIELD1, queryVector, topK, filter);
         ScoreDoc[] filteredHits = searcher.search(filteredQuery, topK).scoreDocs;
 
         for (ScoreDoc hit : filteredHits) {
@@ -230,6 +217,11 @@ public class TestAcceleratedHNSWDeletedDocuments extends LuceneTestCase {
   public void testVectorSearchAfterAllDocumentsDeleted() throws IOException {
 
     try (Directory directory = newDirectory()) {
+      int datasetSize = dataProvider.getDatasetSize();
+      float[][] dataset = dataProvider.getDataset1();
+      int topK = dataProvider.getTopK();
+      float[] queryVector = dataProvider.getQueries(1)[0];
+
       // Create and delete all documents
       try (IndexWriter writer = new IndexWriter(directory, createWriterConfig(random, codec))) {
         // Add all documents
@@ -238,7 +230,7 @@ public class TestAcceleratedHNSWDeletedDocuments extends LuceneTestCase {
           doc.add(new StringField(ID_FIELD, String.valueOf(i), Field.Store.YES));
           doc.add(
               new KnnFloatVectorField(
-                  VECTOR_FIELD, dataset[i], VectorSimilarityFunction.EUCLIDEAN));
+                  VECTOR_FIELD1, dataset[i], VectorSimilarityFunction.EUCLIDEAN));
           writer.addDocument(doc);
         }
         writer.commit();
@@ -254,9 +246,8 @@ public class TestAcceleratedHNSWDeletedDocuments extends LuceneTestCase {
       // Verify search returns no results
       try (DirectoryReader reader = DirectoryReader.open(directory)) {
         IndexSearcher searcher = newSearcher(reader);
-        float[] queryVector = generateRandomVector(random, dimensions);
 
-        Query query = new KnnFloatVectorQuery(VECTOR_FIELD, queryVector, topK);
+        Query query = new KnnFloatVectorQuery(VECTOR_FIELD1, queryVector, topK);
         TopDocs results = searcher.search(query, topK);
 
         assertEquals(
@@ -271,7 +262,11 @@ public class TestAcceleratedHNSWDeletedDocuments extends LuceneTestCase {
   public void testVectorSearchWithPartialDeletionAndReindexing() throws IOException {
 
     try (Directory directory = newDirectory()) {
-      float[][] dataset = generateRandomVectors(random, datasetSize, dimensions);
+      int datasetSize = dataProvider.getDatasetSize();
+      float[][] dataset = dataProvider.getDataset1();
+      int topK = dataProvider.getTopK();
+      float[] queryVector = dataProvider.getQueries(1)[0];
+
       List<Integer> activeDocIds = new ArrayList<>();
 
       // Initial indexing
@@ -282,7 +277,7 @@ public class TestAcceleratedHNSWDeletedDocuments extends LuceneTestCase {
           doc.add(new StringField(ID_FIELD, String.valueOf(i), Field.Store.YES));
           doc.add(
               new KnnFloatVectorField(
-                  VECTOR_FIELD, dataset[i], VectorSimilarityFunction.EUCLIDEAN));
+                  VECTOR_FIELD1, dataset[i], VectorSimilarityFunction.EUCLIDEAN));
           writer.addDocument(doc);
           activeDocIds.add(i);
         }
@@ -302,7 +297,7 @@ public class TestAcceleratedHNSWDeletedDocuments extends LuceneTestCase {
           doc.add(new StringField(ID_FIELD, String.valueOf(i), Field.Store.YES));
           doc.add(
               new KnnFloatVectorField(
-                  VECTOR_FIELD, dataset[i], VectorSimilarityFunction.EUCLIDEAN));
+                  VECTOR_FIELD1, dataset[i], VectorSimilarityFunction.EUCLIDEAN));
           writer.addDocument(doc);
           activeDocIds.add(i);
         }
@@ -312,9 +307,8 @@ public class TestAcceleratedHNSWDeletedDocuments extends LuceneTestCase {
       // Verify search behavior after deletions and additions
       try (DirectoryReader reader = DirectoryReader.open(directory)) {
         IndexSearcher searcher = newSearcher(reader);
-        float[] queryVector = generateRandomVector(random, dimensions);
 
-        Query query = new KnnFloatVectorQuery(VECTOR_FIELD, queryVector, topK);
+        Query query = new KnnFloatVectorQuery(VECTOR_FIELD1, queryVector, topK);
         ScoreDoc[] hits = searcher.search(query, topK).scoreDocs;
 
         Set<Integer> resultIds = new HashSet<>();

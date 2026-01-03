@@ -4,11 +4,13 @@
  */
 package com.nvidia.cuvs.lucene;
 
+import static com.nvidia.cuvs.lucene.TestDataProvider.ID_FIELD;
+import static com.nvidia.cuvs.lucene.TestDataProvider.TEXT_FIELD;
+import static com.nvidia.cuvs.lucene.TestDataProvider.VECTOR_FIELD1;
+import static com.nvidia.cuvs.lucene.TestDataProvider.VECTOR_FIELD2;
 import static com.nvidia.cuvs.lucene.TestUtils.createWriter;
 import static com.nvidia.cuvs.lucene.TestUtils.generateExpectedResults;
-import static com.nvidia.cuvs.lucene.TestUtils.generateQueries;
-import static com.nvidia.cuvs.lucene.TestUtils.generateRandomVector;
-import static com.nvidia.cuvs.lucene.TestUtils.generateRandomVectors;
+import static org.apache.lucene.index.VectorSimilarityFunction.EUCLIDEAN;
 
 import java.io.IOException;
 import java.util.Arrays;
@@ -23,7 +25,6 @@ import org.apache.lucene.document.KnnFloatVectorField;
 import org.apache.lucene.document.StringField;
 import org.apache.lucene.index.IndexReader;
 import org.apache.lucene.index.Term;
-import org.apache.lucene.index.VectorSimilarityFunction;
 import org.apache.lucene.search.IndexSearcher;
 import org.apache.lucene.search.KnnFloatVectorQuery;
 import org.apache.lucene.search.Query;
@@ -48,22 +49,7 @@ public class TestAcceleratedHNSWRandomizedSearch extends LuceneTestCase {
   private static IndexReader reader;
   private static Directory directory;
   private static Random random;
-  private static int datasetSize;
-  private static int dimensions;
-  private static int topK;
-  private static int numQueries;
-  private static float[][] dataset;
-  private static float[][] dataset2;
-  private static float[] queryVector;
-
-  private static final String ID_FIELD = "id";
-  private static final String TEXT_FIELD = "some_text_field";
-  private static final String VECTOR_FIELD = "vector_field";
-  private static final String VECTOR_FIELD2 = "vector_field2";
-  private static final int DATASET_SIZE_LIMIT = 1000;
-  private static final int DIMENSIONS_LIMIT = 256;
-  private static final int TOP_K_LIMIT = 64;
-  private static final int NUM_QUERIES_LIMIT = 10;
+  private static TestDataProvider dataProvider;
 
   @BeforeClass
   public static void beforeClass() throws Exception {
@@ -72,27 +58,13 @@ public class TestAcceleratedHNSWRandomizedSearch extends LuceneTestCase {
         Lucene99AcceleratedHNSWVectorsFormat.supported());
     directory = newDirectory();
     random = random();
+    dataProvider = new TestDataProvider(random);
     codec = TestUtil.alwaysKnnVectorsFormat(new Lucene99AcceleratedHNSWVectorsFormat());
     RandomIndexWriter writer = createWriter(random, directory, codec);
 
-    datasetSize = random.nextInt(5, DATASET_SIZE_LIMIT);
-    dimensions = random.nextInt(8, DIMENSIONS_LIMIT);
-    topK = Math.min(random.nextInt(2, TOP_K_LIMIT), datasetSize);
-    dataset = generateRandomVectors(random, datasetSize, dimensions);
-    dataset2 = generateRandomVectors(random, datasetSize, dimensions);
-    queryVector = generateRandomVector(random, dimensions);
-    numQueries = Math.min(random.nextInt(1, NUM_QUERIES_LIMIT), datasetSize);
-
-    log.log(
-        Level.FINE,
-        "Dataset size: "
-            + datasetSize
-            + "x"
-            + dimensions
-            + ", topK: "
-            + topK
-            + ", numQueries: "
-            + numQueries);
+    int datasetSize = dataProvider.getDatasetSize();
+    float[][] dataset = dataProvider.getDataset1();
+    float[][] dataset2 = dataProvider.getDataset2();
 
     // Add documents
     for (int i = 0; i < datasetSize; i++) {
@@ -101,11 +73,8 @@ public class TestAcceleratedHNSWRandomizedSearch extends LuceneTestCase {
       doc.add(newTextField(TEXT_FIELD, English.intToEnglish(i), Field.Store.YES));
       boolean skipVector = random.nextInt(10) < 4;
       if (!skipVector || datasetSize < 100) {
-        doc.add(
-            new KnnFloatVectorField(VECTOR_FIELD, dataset[i], VectorSimilarityFunction.EUCLIDEAN));
-        doc.add(
-            new KnnFloatVectorField(
-                VECTOR_FIELD2, dataset2[i], VectorSimilarityFunction.EUCLIDEAN));
+        doc.add(new KnnFloatVectorField(VECTOR_FIELD1, dataset[i], EUCLIDEAN));
+        doc.add(new KnnFloatVectorField(VECTOR_FIELD2, dataset2[i], EUCLIDEAN));
       }
       writer.addDocument(doc);
     }
@@ -118,13 +87,17 @@ public class TestAcceleratedHNSWRandomizedSearch extends LuceneTestCase {
   @Test
   public void testVectorSearch() throws IOException {
 
+    float[][] dataset = dataProvider.getDataset1();
+    int topK = dataProvider.getTopK();
+    int numQueries = dataProvider.getNumQueries();
+    float[][] queries = dataProvider.getQueries(numQueries);
+
     // Generate queries and expected results for each
-    float[][] queries = generateQueries(random, dimensions, numQueries);
     List<List<Integer>> expected = generateExpectedResults(topK, dataset, queries);
 
     for (int i = 0; i < numQueries; i++) {
       log.log(Level.FINE, "Running query: " + (i + 1) + " of " + numQueries);
-      Query query = new KnnFloatVectorQuery(VECTOR_FIELD, queries[i], topK);
+      Query query = new KnnFloatVectorQuery(VECTOR_FIELD1, queries[i], topK);
 
       // Perform search
       ScoreDoc[] hits = searcher.search(query, topK).scoreDocs;
@@ -144,7 +117,11 @@ public class TestAcceleratedHNSWRandomizedSearch extends LuceneTestCase {
   @Test
   public void testVectorSearchWithFilter() throws IOException {
     // Find a document that has a vector by doing a search first
-    Query unfiltered = new KnnFloatVectorQuery(VECTOR_FIELD, queryVector, 1);
+
+    int topK = dataProvider.getTopK();
+    float[] queryVector = dataProvider.getQueries(1)[0];
+
+    Query unfiltered = new KnnFloatVectorQuery(VECTOR_FIELD1, queryVector, 1);
     ScoreDoc[] unfilteredHits = searcher.search(unfiltered, 1).scoreDocs;
 
     assertTrue(
@@ -157,7 +134,7 @@ public class TestAcceleratedHNSWRandomizedSearch extends LuceneTestCase {
     Query filter = new TermQuery(new Term(ID_FIELD, targetDocId));
 
     // Test the new constructor with filter
-    Query filteredQuery = new KnnFloatVectorQuery(VECTOR_FIELD, queryVector, topK, filter);
+    Query filteredQuery = new KnnFloatVectorQuery(VECTOR_FIELD1, queryVector, topK, filter);
 
     ScoreDoc[] filteredHits = searcher.search(filteredQuery, topK).scoreDocs;
 

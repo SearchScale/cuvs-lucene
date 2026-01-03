@@ -4,9 +4,13 @@
  */
 package com.nvidia.cuvs.lucene;
 
+import static com.nvidia.cuvs.lucene.TestDataProvider.ID_FIELD;
+import static com.nvidia.cuvs.lucene.TestDataProvider.VECTOR_FIELD1;
+import static com.nvidia.cuvs.lucene.TestDataProvider.VECTOR_FIELD2;
 import static org.apache.lucene.index.VectorSimilarityFunction.EUCLIDEAN;
 
 import java.util.List;
+import java.util.Random;
 import org.apache.lucene.codecs.Codec;
 import org.apache.lucene.document.Document;
 import org.apache.lucene.document.Field;
@@ -28,15 +32,16 @@ import org.junit.Ignore;
 @SuppressSysoutChecks(bugUrl = "")
 public class TestAcceleratedHNSWVectorsFormat extends BaseKnnVectorsFormatTestCase {
 
-  private final String ID_FIELD = "id";
-  private final String VECTOR_FIELD = "vector_field";
-  private final String VECTOR_FIELD2 = "vector_field2";
+  private static TestDataProvider dataProvider;
+  private static Random random;
 
   @BeforeClass
   public static void beforeClass() {
     assumeTrue(
         "cuVS not supported so skipping these tests",
         Lucene99AcceleratedHNSWVectorsFormat.supported());
+    random = random();
+    dataProvider = new TestDataProvider(random);
   }
 
   @Override
@@ -46,12 +51,7 @@ public class TestAcceleratedHNSWVectorsFormat extends BaseKnnVectorsFormatTestCa
 
   public void testMergeTwoSegsWithASingleDocPerSeg() throws Exception {
     final int numDocs = 2;
-    final int dimension = 256;
-    float[][] vectors = new float[numDocs][dimension];
-
-    for (int i = 0; i < numDocs; i++) {
-      vectors[i] = randomVector(dimension);
-    }
+    float[][] vectors = dataProvider.getVectors(numDocs);
 
     try (Directory dir = newDirectory();
         IndexWriter w = new IndexWriter(dir, newIndexWriterConfig())) {
@@ -59,7 +59,7 @@ public class TestAcceleratedHNSWVectorsFormat extends BaseKnnVectorsFormatTestCa
       for (int i = 0; i < numDocs; i++) {
         Document doc = new Document();
         doc.add(new StringField(ID_FIELD, String.valueOf(i), Field.Store.YES));
-        doc.add(new KnnFloatVectorField(VECTOR_FIELD, vectors[i], EUCLIDEAN));
+        doc.add(new KnnFloatVectorField(VECTOR_FIELD1, vectors[i], EUCLIDEAN));
         w.addDocument(doc);
         w.commit();
       }
@@ -69,7 +69,7 @@ public class TestAcceleratedHNSWVectorsFormat extends BaseKnnVectorsFormatTestCa
         List<LeafReaderContext> subReaders = reader.leaves();
         assertEquals(numDocs, subReaders.size());
         for (int i = 0; i < numDocs; i++) {
-          assertEquals(1, subReaders.get(i).reader().getFloatVectorValues(VECTOR_FIELD).size());
+          assertEquals(1, subReaders.get(i).reader().getFloatVectorValues(VECTOR_FIELD1).size());
         }
       }
 
@@ -79,7 +79,7 @@ public class TestAcceleratedHNSWVectorsFormat extends BaseKnnVectorsFormatTestCa
       // verify merged content
       try (DirectoryReader reader = DirectoryReader.open(w)) {
         LeafReader r = getOnlyLeafReader(reader);
-        FloatVectorValues values = r.getFloatVectorValues(VECTOR_FIELD);
+        FloatVectorValues values = r.getFloatVectorValues(VECTOR_FIELD1);
         assertNotNull(values);
         assertEquals(numDocs, values.size());
         for (int i = 0; i < numDocs; i++) {
@@ -93,14 +93,8 @@ public class TestAcceleratedHNSWVectorsFormat extends BaseKnnVectorsFormatTestCa
   public void testTwoVectorFieldsPerDoc() throws Exception {
 
     final int numDocs = 2;
-    final int dimension = 256;
-    float[][] vectors1 = new float[numDocs][dimension];
-    float[][] vectors2 = new float[numDocs][dimension];
-
-    for (int i = 0; i < numDocs; i++) {
-      vectors1[i] = randomVector(dimension);
-      vectors2[i] = randomVector(dimension);
-    }
+    float[][] vectors1 = dataProvider.getVectors(numDocs);
+    float[][] vectors2 = dataProvider.getVectors(numDocs);
 
     try (Directory dir = newDirectory();
         IndexWriter w = new IndexWriter(dir, newIndexWriterConfig())) {
@@ -108,7 +102,7 @@ public class TestAcceleratedHNSWVectorsFormat extends BaseKnnVectorsFormatTestCa
       for (int i = 0; i < numDocs; i++) {
         Document doc = new Document();
         doc.add(new StringField(ID_FIELD, String.valueOf(i), Field.Store.YES));
-        doc.add(new KnnFloatVectorField(VECTOR_FIELD, vectors1[i], EUCLIDEAN));
+        doc.add(new KnnFloatVectorField(VECTOR_FIELD1, vectors1[i], EUCLIDEAN));
         doc.add(new KnnFloatVectorField(VECTOR_FIELD2, vectors2[i], EUCLIDEAN));
         w.addDocument(doc);
       }
@@ -119,7 +113,7 @@ public class TestAcceleratedHNSWVectorsFormat extends BaseKnnVectorsFormatTestCa
         LeafReader r = getOnlyLeafReader(reader);
 
         for (int i = 0; i < numDocs; i++) {
-          FloatVectorValues values = r.getFloatVectorValues(VECTOR_FIELD);
+          FloatVectorValues values = r.getFloatVectorValues(VECTOR_FIELD1);
           assertNotNull(values);
           assertEquals(2, values.size());
           assertArrayEquals(vectors1[i], values.vectorValue(i), 0.0f);
@@ -133,7 +127,8 @@ public class TestAcceleratedHNSWVectorsFormat extends BaseKnnVectorsFormatTestCa
         }
 
         // Check boundary condition - search with a 0 topK
-        var topDocs = r.searchNearestVectors(VECTOR_FIELD, randomVector(dimension), 0, null, 10);
+        float[] target = dataProvider.getVectors(1)[0];
+        var topDocs = r.searchNearestVectors(VECTOR_FIELD1, target, 0, null, 10);
         assertEquals(0, topDocs.scoreDocs.length);
         assertEquals(0, topDocs.totalHits.value());
       }

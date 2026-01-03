@@ -4,10 +4,11 @@
  */
 package com.nvidia.cuvs.lucene;
 
+import static com.nvidia.cuvs.lucene.TestDataProvider.CATEGORY_FIELD;
+import static com.nvidia.cuvs.lucene.TestDataProvider.ID_FIELD;
+import static com.nvidia.cuvs.lucene.TestDataProvider.VECTOR_FIELD1;
 import static com.nvidia.cuvs.lucene.TestUtils.createWriter;
 import static com.nvidia.cuvs.lucene.TestUtils.createWriterConfig;
-import static com.nvidia.cuvs.lucene.TestUtils.generateRandomVector;
-import static com.nvidia.cuvs.lucene.TestUtils.generateRandomVectors;
 
 import java.io.IOException;
 import java.util.ArrayList;
@@ -46,43 +47,22 @@ public class TestCuVSDeletedDocuments extends LuceneTestCase {
   private static Logger log = Logger.getLogger(TestCuVSDeletedDocuments.class.getName());
   private static Codec codec;
   private static Random random;
-  private static int datasetSize;
-  private static int dimensions;
-  private static int topK;
-  private static float[][] dataset;
+  private static TestDataProvider dataProvider;
   private static float deletionProbability;
   private static float vectorProbability;
-  private static float[] queryVector;
-
-  private static final String ID_FIELD = "id";
-  private static final String VECTOR_FIELD = "vector_field";
-  private static final String CATEGORY_FIELD = "category_field";
-  private static final int DATASET_SIZE_LIMIT = 1000;
-  private static final int DIMENSIONS_LIMIT = 256;
-  private static final int TOP_K_LIMIT = 64;
 
   @BeforeClass
   public static void beforeClass() throws Exception {
     assumeTrue("cuVS not supported so skipping these tests", CuVS2510GPUVectorsFormat.supported());
     random = random();
+    dataProvider = new TestDataProvider(random);
     codec = TestUtil.alwaysKnnVectorsFormat(new CuVS2510GPUVectorsFormat());
-    datasetSize = random.nextInt(200, DATASET_SIZE_LIMIT);
-    dimensions = random.nextInt(8, DIMENSIONS_LIMIT);
-    topK = Math.min(random.nextInt(2, TOP_K_LIMIT), datasetSize);
-    dataset = generateRandomVectors(random, datasetSize, dimensions);
     deletionProbability = random.nextFloat() * 0.4f + 0.1f;
     vectorProbability = random.nextFloat() * 0.5f + 0.3f;
-    queryVector = generateRandomVector(random, dimensions);
 
     log.log(
         Level.FINE,
-        "Dataset size: "
-            + datasetSize
-            + "x"
-            + dimensions
-            + ", topK: "
-            + topK
-            + ", deletion probability: "
+        ", deletion probability: "
             + deletionProbability
             + ", vector probability: "
             + vectorProbability);
@@ -90,6 +70,11 @@ public class TestCuVSDeletedDocuments extends LuceneTestCase {
 
   @Test
   public void testVectorSearchWithDeletedDocuments() throws IOException {
+
+    int datasetSize = dataProvider.getDatasetSize();
+    float[][] dataset = dataProvider.getDataset1();
+    int topK = dataProvider.getTopK();
+    float[] queryVector = dataProvider.getQueries(1)[0];
 
     try (BaseDirectoryWrapper directory = newDirectory()) {
       Set<Integer> deletedDocs = new HashSet<>();
@@ -102,7 +87,7 @@ public class TestCuVSDeletedDocuments extends LuceneTestCase {
           doc.add(new StringField(ID_FIELD, String.valueOf(i), Field.Store.YES));
           doc.add(
               new KnnFloatVectorField(
-                  VECTOR_FIELD, dataset[i], VectorSimilarityFunction.EUCLIDEAN));
+                  VECTOR_FIELD1, dataset[i], VectorSimilarityFunction.EUCLIDEAN));
           writer.addDocument(doc);
         }
         writer.commit();
@@ -123,7 +108,7 @@ public class TestCuVSDeletedDocuments extends LuceneTestCase {
       try (DirectoryReader reader = DirectoryReader.open(directory)) {
         IndexSearcher searcher = newSearcher(reader);
 
-        Query query = new GPUKnnFloatVectorQuery(VECTOR_FIELD, queryVector, topK, null, topK, 1);
+        Query query = new GPUKnnFloatVectorQuery(VECTOR_FIELD1, queryVector, topK, null, topK, 1);
         ScoreDoc[] hits = searcher.search(query, topK).scoreDocs;
 
         // Verify we got results
@@ -157,6 +142,10 @@ public class TestCuVSDeletedDocuments extends LuceneTestCase {
     try (Directory directory = newDirectory()) {
       Set<Integer> docsWithoutVectors = new HashSet<>();
       Set<Integer> deletedDocs = new HashSet<>();
+      int datasetSize = dataProvider.getDatasetSize();
+      float[][] dataset = dataProvider.getDataset1();
+      int topK = dataProvider.getTopK();
+      float[] queryVector = dataProvider.getQueries(1)[0];
 
       // Create index with mixed documents
       try (RandomIndexWriter writer = createWriter(random, directory, codec)) {
@@ -171,7 +160,7 @@ public class TestCuVSDeletedDocuments extends LuceneTestCase {
           if (random.nextFloat() < vectorProbability) {
             doc.add(
                 new KnnFloatVectorField(
-                    VECTOR_FIELD, dataset[i], VectorSimilarityFunction.EUCLIDEAN));
+                    VECTOR_FIELD1, dataset[i], VectorSimilarityFunction.EUCLIDEAN));
           } else {
             docsWithoutVectors.add(i);
           }
@@ -194,7 +183,7 @@ public class TestCuVSDeletedDocuments extends LuceneTestCase {
       try (DirectoryReader reader = DirectoryReader.open(directory)) {
         IndexSearcher searcher = newSearcher(reader);
 
-        Query query = new GPUKnnFloatVectorQuery(VECTOR_FIELD, queryVector, topK, null, topK, 1);
+        Query query = new GPUKnnFloatVectorQuery(VECTOR_FIELD1, queryVector, topK, null, topK, 1);
         ScoreDoc[] hits = searcher.search(query, topK).scoreDocs;
 
         // Verify results
@@ -209,7 +198,7 @@ public class TestCuVSDeletedDocuments extends LuceneTestCase {
         // Test filtered search with deletions
         Query filter = new TermQuery(new Term(CATEGORY_FIELD, "A"));
         Query filteredQuery =
-            new GPUKnnFloatVectorQuery(VECTOR_FIELD, queryVector, topK, filter, topK, 1);
+            new GPUKnnFloatVectorQuery(VECTOR_FIELD1, queryVector, topK, filter, topK, 1);
         ScoreDoc[] filteredHits = searcher.search(filteredQuery, topK).scoreDocs;
 
         for (ScoreDoc hit : filteredHits) {
@@ -228,6 +217,10 @@ public class TestCuVSDeletedDocuments extends LuceneTestCase {
   public void testVectorSearchAfterAllDocumentsDeleted() throws IOException {
 
     try (Directory directory = newDirectory()) {
+      int datasetSize = dataProvider.getDatasetSize();
+      float[][] dataset = dataProvider.getDataset1();
+      int topK = dataProvider.getTopK();
+      float[] queryVector = dataProvider.getQueries(1)[0];
 
       // Create and delete all documents
       try (IndexWriter writer = new IndexWriter(directory, createWriterConfig(random, codec))) {
@@ -236,7 +229,7 @@ public class TestCuVSDeletedDocuments extends LuceneTestCase {
           doc.add(new StringField(ID_FIELD, String.valueOf(i), Field.Store.YES));
           doc.add(
               new KnnFloatVectorField(
-                  VECTOR_FIELD, dataset[i], VectorSimilarityFunction.EUCLIDEAN));
+                  VECTOR_FIELD1, dataset[i], VectorSimilarityFunction.EUCLIDEAN));
           writer.addDocument(doc);
         }
         writer.commit();
@@ -253,7 +246,7 @@ public class TestCuVSDeletedDocuments extends LuceneTestCase {
       try (DirectoryReader reader = DirectoryReader.open(directory)) {
         IndexSearcher searcher = newSearcher(reader);
 
-        Query query = new GPUKnnFloatVectorQuery(VECTOR_FIELD, queryVector, topK, null, topK, 1);
+        Query query = new GPUKnnFloatVectorQuery(VECTOR_FIELD1, queryVector, topK, null, topK, 1);
         TopDocs results = searcher.search(query, topK);
 
         assertEquals(
@@ -269,6 +262,10 @@ public class TestCuVSDeletedDocuments extends LuceneTestCase {
 
     try (Directory directory = newDirectory()) {
       List<Integer> activeDocIds = new ArrayList<>();
+      int datasetSize = dataProvider.getDatasetSize();
+      float[][] dataset = dataProvider.getDataset1();
+      int topK = dataProvider.getTopK();
+      float[] queryVector = dataProvider.getQueries(1)[0];
 
       // Initial indexing
       try (IndexWriter writer = new IndexWriter(directory, createWriterConfig(random, codec))) {
@@ -278,7 +275,7 @@ public class TestCuVSDeletedDocuments extends LuceneTestCase {
           doc.add(new StringField(ID_FIELD, String.valueOf(i), Field.Store.YES));
           doc.add(
               new KnnFloatVectorField(
-                  VECTOR_FIELD, dataset[i], VectorSimilarityFunction.EUCLIDEAN));
+                  VECTOR_FIELD1, dataset[i], VectorSimilarityFunction.EUCLIDEAN));
           writer.addDocument(doc);
           activeDocIds.add(i);
         }
@@ -298,7 +295,7 @@ public class TestCuVSDeletedDocuments extends LuceneTestCase {
           doc.add(new StringField(ID_FIELD, String.valueOf(i), Field.Store.YES));
           doc.add(
               new KnnFloatVectorField(
-                  VECTOR_FIELD, dataset[i], VectorSimilarityFunction.EUCLIDEAN));
+                  VECTOR_FIELD1, dataset[i], VectorSimilarityFunction.EUCLIDEAN));
           writer.addDocument(doc);
           activeDocIds.add(i);
         }
@@ -309,7 +306,7 @@ public class TestCuVSDeletedDocuments extends LuceneTestCase {
       try (DirectoryReader reader = DirectoryReader.open(directory)) {
         IndexSearcher searcher = newSearcher(reader);
 
-        Query query = new GPUKnnFloatVectorQuery(VECTOR_FIELD, queryVector, topK, null, topK, 1);
+        Query query = new GPUKnnFloatVectorQuery(VECTOR_FIELD1, queryVector, topK, null, topK, 1);
         ScoreDoc[] hits = searcher.search(query, topK).scoreDocs;
 
         Set<Integer> resultIds = new HashSet<>();

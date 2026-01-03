@@ -4,9 +4,11 @@
  */
 package com.nvidia.cuvs.lucene;
 
+import static com.nvidia.cuvs.lucene.TestDataProvider.ID_FIELD;
+import static com.nvidia.cuvs.lucene.TestDataProvider.VECTOR_FIELD1;
+import static com.nvidia.cuvs.lucene.TestDataProvider.VECTOR_FIELD2;
 import static com.nvidia.cuvs.lucene.TestUtils.createWriter;
 import static com.nvidia.cuvs.lucene.TestUtils.generateExpectedResults;
-import static com.nvidia.cuvs.lucene.TestUtils.generateRandomVectors;
 import static com.nvidia.cuvs.lucene.Utils.cuVSResourcesOrNull;
 import static org.apache.lucene.index.VectorSimilarityFunction.EUCLIDEAN;
 
@@ -49,19 +51,8 @@ public class TestAcceleratedHNSWFallback extends LuceneTestCase {
   private static Logger log = Logger.getLogger(TestAcceleratedHNSWFallback.class.getName());
   private static Random random;
   private static Path indexDirPath;
-  private static int datasetSize;
-  private static int dimensions;
-  private static int topK;
-  private static float[][] dataset;
-  private static float[][] dataset2;
   private static Codec codec;
-
-  private static final String ID_FIELD = "id";
-  private static final String VECTOR_FIELD = "vector_field";
-  private static final String VECTOR_FIELD2 = "vector_field2";
-  private static final int DATASET_SIZE_LIMIT = 1000;
-  private static final int DIMENSIONS_LIMIT = 256;
-  private static final int TOP_K_LIMIT = 64;
+  private static TestDataProvider dataProvider;
 
   @Before
   public void beforeTest() throws Exception {
@@ -72,26 +63,29 @@ public class TestAcceleratedHNSWFallback extends LuceneTestCase {
     Lucene99AcceleratedHNSWVectorsFormat.setResources(null);
 
     random = new Random();
+    dataProvider = new TestDataProvider(random);
     indexDirPath = Paths.get(UUID.randomUUID().toString());
-    datasetSize = random.nextInt(200, DATASET_SIZE_LIMIT);
-    dimensions = random.nextInt(8, DIMENSIONS_LIMIT);
-    topK = Math.min(random.nextInt(2, TOP_K_LIMIT), datasetSize);
-    dataset = generateRandomVectors(random, datasetSize, dimensions);
-    dataset2 = generateRandomVectors(random, datasetSize, dimensions);
     codec =
         new Lucene101AcceleratedHNSWCodec(32, 128, 64, CagraGraphBuildAlgo.NN_DESCENT, 3, 16, 100);
-    log.log(Level.FINE, "Dataset size: " + datasetSize + "x" + dimensions + ", topK: " + topK);
   }
 
   @Test
   public void testAcceleratedHNSWFallback() throws Exception {
+
+    int datasetSize = dataProvider.getDatasetSize();
+    int dimensions = dataProvider.getDimensions();
+    float[][] dataset = dataProvider.getDataset1();
+    float[][] dataset2 = dataProvider.getDataset2();
+    int topK = dataProvider.getTopK();
+    float[] queryVector = dataProvider.getQueries(1)[0];
+
     // Indexing
     try (Directory indexDirectory = FSDirectory.open(indexDirPath);
         RandomIndexWriter indexWriter = createWriter(random, indexDirectory, codec)) {
       for (int i = 0; i < datasetSize; i++) {
         Document document = new Document();
         document.add(new StringField(ID_FIELD, Integer.toString(i), Field.Store.YES));
-        document.add(new KnnFloatVectorField(VECTOR_FIELD, dataset[i], EUCLIDEAN));
+        document.add(new KnnFloatVectorField(VECTOR_FIELD1, dataset[i], EUCLIDEAN));
         document.add(new KnnFloatVectorField(VECTOR_FIELD2, dataset2[i], EUCLIDEAN));
         indexWriter.addDocument(document);
       }
@@ -104,11 +98,11 @@ public class TestAcceleratedHNSWFallback extends LuceneTestCase {
       int vectorCount = 0;
       for (LeafReaderContext leafReaderContext : reader.leaves()) {
         LeafReader leafReader = leafReaderContext.reader();
-        FloatVectorValues knnValues = leafReader.getFloatVectorValues(VECTOR_FIELD);
+        FloatVectorValues knnValues = leafReader.getFloatVectorValues(VECTOR_FIELD1);
         assertNotNull(knnValues);
         log.log(
             Level.FINE,
-            VECTOR_FIELD
+            VECTOR_FIELD1
                 + " field: "
                 + knnValues.size()
                 + " vectors, "
@@ -122,10 +116,9 @@ public class TestAcceleratedHNSWFallback extends LuceneTestCase {
       log.log(Level.FINE, "Testing vector search queries...");
       IndexSearcher searcher = new IndexSearcher(reader);
 
-      float[] queryVector = generateRandomVectors(random, 1, dimensions)[0];
       log.log(Level.FINER, "Query vector: " + Arrays.toString(queryVector));
 
-      KnnFloatVectorQuery query = new KnnFloatVectorQuery(VECTOR_FIELD, queryVector, topK);
+      KnnFloatVectorQuery query = new KnnFloatVectorQuery(VECTOR_FIELD1, queryVector, topK);
       TopDocs results = searcher.search(query, topK);
 
       log.log(Level.FINE, "Search results (" + results.totalHits + " total hits):");
