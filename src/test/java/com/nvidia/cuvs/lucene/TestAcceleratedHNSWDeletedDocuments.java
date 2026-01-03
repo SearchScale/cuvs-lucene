@@ -4,6 +4,8 @@
  */
 package com.nvidia.cuvs.lucene;
 
+import static com.nvidia.cuvs.lucene.TestUtils.createWriter;
+import static com.nvidia.cuvs.lucene.TestUtils.createWriterConfig;
 import static com.nvidia.cuvs.lucene.TestUtils.generateRandomVector;
 import static com.nvidia.cuvs.lucene.TestUtils.generateRandomVectors;
 
@@ -22,7 +24,6 @@ import org.apache.lucene.document.KnnFloatVectorField;
 import org.apache.lucene.document.StringField;
 import org.apache.lucene.index.DirectoryReader;
 import org.apache.lucene.index.IndexWriter;
-import org.apache.lucene.index.IndexWriterConfig;
 import org.apache.lucene.index.Term;
 import org.apache.lucene.index.VectorSimilarityFunction;
 import org.apache.lucene.search.IndexSearcher;
@@ -32,8 +33,6 @@ import org.apache.lucene.search.ScoreDoc;
 import org.apache.lucene.search.TermQuery;
 import org.apache.lucene.search.TopDocs;
 import org.apache.lucene.store.Directory;
-import org.apache.lucene.tests.analysis.MockAnalyzer;
-import org.apache.lucene.tests.analysis.MockTokenizer;
 import org.apache.lucene.tests.index.RandomIndexWriter;
 import org.apache.lucene.tests.util.LuceneTestCase;
 import org.apache.lucene.tests.util.LuceneTestCase.SuppressSysoutChecks;
@@ -90,7 +89,7 @@ public class TestAcceleratedHNSWDeletedDocuments extends LuceneTestCase {
       Set<Integer> deletedDocs = new HashSet<>();
 
       // Create index with all documents having vectors
-      try (RandomIndexWriter writer = createWriter(random, directory)) {
+      try (RandomIndexWriter writer = createWriter(random, directory, codec)) {
         for (int i = 0; i < datasetSize; i++) {
           Document doc = new Document();
           doc.add(new StringField("id", String.valueOf(i), Field.Store.YES));
@@ -152,7 +151,7 @@ public class TestAcceleratedHNSWDeletedDocuments extends LuceneTestCase {
       Set<Integer> deletedDocs = new HashSet<>();
 
       // Create index with mixed documents
-      try (RandomIndexWriter writer = createWriter(random, directory)) {
+      try (RandomIndexWriter writer = createWriter(random, directory, codec)) {
         for (int i = 0; i < datasetSize; i++) {
           Document doc = new Document();
           doc.add(new StringField("id", String.valueOf(i), Field.Store.YES));
@@ -225,7 +224,7 @@ public class TestAcceleratedHNSWDeletedDocuments extends LuceneTestCase {
 
     try (Directory directory = newDirectory()) {
       // Create and delete all documents
-      try (IndexWriter writer = new IndexWriter(directory, createWriterConfig(random))) {
+      try (IndexWriter writer = new IndexWriter(directory, createWriterConfig(random, codec))) {
         // Add all documents
         for (int i = 0; i < datasetSize; i++) {
           Document doc = new Document();
@@ -268,7 +267,7 @@ public class TestAcceleratedHNSWDeletedDocuments extends LuceneTestCase {
       List<Integer> activeDocIds = new ArrayList<>();
 
       // Initial indexing
-      try (IndexWriter writer = new IndexWriter(directory, createWriterConfig(random))) {
+      try (IndexWriter writer = new IndexWriter(directory, createWriterConfig(random, codec))) {
         int initialDocs = datasetSize / 2 + random.nextInt(datasetSize / 4);
         for (int i = 0; i < initialDocs; i++) {
           Document doc = new Document();
@@ -324,20 +323,5 @@ public class TestAcceleratedHNSWDeletedDocuments extends LuceneTestCase {
                 + " active documents");
       }
     }
-  }
-
-  private RandomIndexWriter createWriter(Random random, Directory directory) throws IOException {
-    return new RandomIndexWriter(
-        random,
-        directory,
-        newIndexWriterConfig(new MockAnalyzer(random, MockTokenizer.SIMPLE, true))
-            .setCodec(codec)
-            .setMergePolicy(newTieredMergePolicy()));
-  }
-
-  private IndexWriterConfig createWriterConfig(Random random) {
-    return newIndexWriterConfig(new MockAnalyzer(random, MockTokenizer.SIMPLE, true))
-        .setCodec(codec)
-        .setMergePolicy(newTieredMergePolicy());
   }
 }
