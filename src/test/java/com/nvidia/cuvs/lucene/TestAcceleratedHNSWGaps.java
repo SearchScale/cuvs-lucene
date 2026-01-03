@@ -75,6 +75,8 @@ public class TestAcceleratedHNSWGaps extends LuceneTestCase {
     dataset = generateRandomVectors(random, datasetSize, dimensions);
     topK = Math.min(random.nextInt(2, TOP_K_LIMIT), datasetSize);
 
+    log.log(Level.FINE, "Dataset size: " + datasetSize + "x" + dimensions + ", topK: " + topK);
+
     // Create documents where only even-numbered documents have vectors
     for (int i = 0; i < datasetSize; i++) {
       Document doc = new Document();
@@ -129,6 +131,7 @@ public class TestAcceleratedHNSWGaps extends LuceneTestCase {
     float[] queryVector = generateRandomVector(random, dimensions);
 
     String randomEvenInRange = String.valueOf(random.nextInt(datasetSize / 2 + 1) * 2);
+    log.log(Level.FINE, "Randomly chosen even value is: " + randomEvenInRange);
     Query filter = new TermQuery(new Term(ID_FIELD, randomEvenInRange));
     Query filteredQuery = new KnnFloatVectorQuery(VECTOR_FIELD, queryVector, topK, filter);
     ScoreDoc[] filteredHits = searcher.search(filteredQuery, topK).scoreDocs;
