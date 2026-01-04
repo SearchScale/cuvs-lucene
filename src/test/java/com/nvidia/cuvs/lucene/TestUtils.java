@@ -117,4 +117,34 @@ public class TestUtils {
         .setCodec(codec)
         .setMergePolicy(newTieredMergePolicy());
   }
+
+  /** Helper method to generate random vectors */
+  public static float[] generateRandomVector(int dimension, Random random) {
+    float[] vector = new float[dimension];
+    for (int i = 0; i < dimension; i++) {
+      vector[i] = (float) random.nextGaussian();
+    }
+    // Normalize the vector
+    float norm = 0.0f;
+    for (float v : vector) {
+      norm += v * v;
+    }
+    norm = (float) Math.sqrt(norm);
+    if (norm > 0) {
+      for (int i = 0; i < dimension; i++) {
+        vector[i] /= norm;
+      }
+    }
+    return vector;
+  }
+
+  /** Helper method to generate random text strings for sorting */
+  public static String generateRandomText(Random random, int length) {
+    StringBuilder sb = new StringBuilder(length);
+    String chars = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789";
+    for (int i = 0; i < length; i++) {
+      sb.append(chars.charAt(random.nextInt(chars.length())));
+    }
+    return sb.toString();
+  }
 }

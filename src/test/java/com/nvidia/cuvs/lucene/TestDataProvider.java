@@ -13,22 +13,21 @@ import java.util.logging.Logger;
 
 public class TestDataProvider {
 
-  private static Logger log = Logger.getLogger(TestDataProvider.class.getName());
+  private static final Logger log = Logger.getLogger(TestDataProvider.class.getName());
+  private static final int DATASET_SIZE_LIMIT = 1000;
+  private static final int DATASET_SIZE_MIN = 200;
+  private static final int DIMENSIONS_LIMIT = 256;
+  private static final int DIMENSIONS_MIN = 8;
+  private static final int TOP_K_LIMIT = 64;
+  private static final int TOP_K_MIN = 2;
+  private static final int QUERIES_LIMIT = 50;
+  private static final int QUERIES_MIN = 2;
 
   public static final String ID_FIELD = "id";
   public static final String TEXT_FIELD = "some_text_field";
   public static final String CATEGORY_FIELD = "category_field";
   public static final String VECTOR_FIELD1 = "vector_field1";
   public static final String VECTOR_FIELD2 = "vector_field2";
-
-  private final int DATASET_SIZE_LIMIT = 1000;
-  private final int DATASET_SIZE_MIN = 200;
-  private final int DIMENSIONS_LIMIT = 256;
-  private final int DIMENSIONS_MIN = 8;
-  private final int TOP_K_LIMIT = 64;
-  private final int TOP_K_MIN = 2;
-  private final int QUERIES_LIMIT = 50;
-  private final int QUERIES_MIN = 2;
 
   private int datasetSize;
   private int dimensions;
@@ -75,6 +74,14 @@ public class TestDataProvider {
 
   public float[][] getVectors(int numVectors) {
     return generateRandomVectors(random, dimensions, numVectors);
+  }
+
+  public int getRandom(int min, int max) {
+    return random.nextInt(min, max);
+  }
+
+  public double getRandom(double min, double max) {
+    return random.nextDouble(min, max);
   }
 
   public int getNumQueries() {

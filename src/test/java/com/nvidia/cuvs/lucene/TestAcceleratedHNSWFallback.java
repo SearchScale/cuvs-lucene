@@ -48,7 +48,7 @@ import org.junit.Test;
 @SuppressSysoutChecks(bugUrl = "")
 public class TestAcceleratedHNSWFallback extends LuceneTestCase {
 
-  private static Logger log = Logger.getLogger(TestAcceleratedHNSWFallback.class.getName());
+  private static final Logger log = Logger.getLogger(TestAcceleratedHNSWFallback.class.getName());
   private static Random random;
   private static Path indexDirPath;
   private static Codec codec;

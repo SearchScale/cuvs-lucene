@@ -40,7 +40,7 @@ import org.junit.Test;
 @SuppressSysoutChecks(bugUrl = "")
 public class TestCuVSGaps extends LuceneTestCase {
 
-  private static Logger log = Logger.getLogger(TestCuVSGaps.class.getName());
+  private static final Logger log = Logger.getLogger(TestCuVSGaps.class.getName());
   private static Codec codec;
   private static IndexSearcher searcher;
   private static IndexReader reader;

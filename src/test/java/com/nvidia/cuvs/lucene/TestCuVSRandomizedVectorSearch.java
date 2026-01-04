@@ -43,7 +43,8 @@ import org.junit.Test;
 @SuppressSysoutChecks(bugUrl = "")
 public class TestCuVSRandomizedVectorSearch extends LuceneTestCase {
 
-  private static Logger log = Logger.getLogger(TestCuVSRandomizedVectorSearch.class.getName());
+  private static final Logger log =
+      Logger.getLogger(TestCuVSRandomizedVectorSearch.class.getName());
 
   private static Codec codec;
   private static IndexSearcher searcher;

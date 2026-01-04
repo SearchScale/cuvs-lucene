@@ -49,7 +49,7 @@ import org.junit.Test;
 @SuppressSysoutChecks(bugUrl = "")
 public class TestAcceleratedHNSW extends LuceneTestCase {
 
-  private static Logger log = Logger.getLogger(TestAcceleratedHNSW.class.getName());
+  private static final Logger log = Logger.getLogger(TestAcceleratedHNSW.class.getName());
   private static Random random;
   private static Path indexDirPath;
   private static String randomID;

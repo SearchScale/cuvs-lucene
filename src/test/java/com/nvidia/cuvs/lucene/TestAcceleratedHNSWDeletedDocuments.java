@@ -44,7 +44,8 @@ import org.junit.Test;
 @SuppressSysoutChecks(bugUrl = "")
 public class TestAcceleratedHNSWDeletedDocuments extends LuceneTestCase {
 
-  private static Logger log = Logger.getLogger(TestAcceleratedHNSWDeletedDocuments.class.getName());
+  private static final Logger log =
+      Logger.getLogger(TestAcceleratedHNSWDeletedDocuments.class.getName());
   private static Codec codec;
   private static Random random;
   private static float deletionProbability;

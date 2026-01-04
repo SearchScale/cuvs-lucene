@@ -43,7 +43,8 @@ import org.junit.Test;
 @SuppressSysoutChecks(bugUrl = "")
 public class TestAcceleratedHNSWRandomizedSearch extends LuceneTestCase {
 
-  private static Logger log = Logger.getLogger(TestAcceleratedHNSWRandomizedSearch.class.getName());
+  private static final Logger log =
+      Logger.getLogger(TestAcceleratedHNSWRandomizedSearch.class.getName());
   private static Codec codec;
   private static IndexSearcher searcher;
   private static IndexReader reader;

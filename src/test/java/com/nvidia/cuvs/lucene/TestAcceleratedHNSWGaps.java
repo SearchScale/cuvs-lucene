@@ -42,7 +42,7 @@ import org.junit.Test;
 @SuppressSysoutChecks(bugUrl = "")
 public class TestAcceleratedHNSWGaps extends LuceneTestCase {
 
-  private static Logger log = Logger.getLogger(TestAcceleratedHNSWGaps.class.getName());
+  private static final Logger log = Logger.getLogger(TestAcceleratedHNSWGaps.class.getName());
   private static Codec codec;
   private static IndexSearcher searcher;
   private static IndexReader reader;
