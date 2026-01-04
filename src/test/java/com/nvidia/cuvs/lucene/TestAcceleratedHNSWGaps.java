@@ -7,8 +7,8 @@ package com.nvidia.cuvs.lucene;
 import static com.nvidia.cuvs.lucene.TestDataProvider.ID_FIELD;
 import static com.nvidia.cuvs.lucene.TestDataProvider.TEXT_FIELD;
 import static com.nvidia.cuvs.lucene.TestDataProvider.VECTOR_FIELD1;
-import static com.nvidia.cuvs.lucene.TestUtils.calculateExpectedTopK;
 import static com.nvidia.cuvs.lucene.TestUtils.createWriter;
+import static com.nvidia.cuvs.lucene.TestUtils.generateExpectedTopK;
 import static org.apache.lucene.index.VectorSimilarityFunction.EUCLIDEAN;
 
 import java.io.IOException;
@@ -106,7 +106,8 @@ public class TestAcceleratedHNSWGaps extends LuceneTestCase {
     }
 
     // Verify the results match expected top-k
-    List<Integer> expectedIds = calculateExpectedTopK(queryVector, topK, dataset);
+    List<Integer> expectedIds =
+        generateExpectedTopK(topK, dataset, new float[][] {queryVector}).get(0);
     for (ScoreDoc hit : hits) {
       int id = Integer.parseInt(storedFields.document(hit.doc).get(ID_FIELD));
       assertTrue("Result " + id + " should be in expected top-k results", expectedIds.contains(id));

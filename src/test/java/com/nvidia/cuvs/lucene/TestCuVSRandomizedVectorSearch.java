@@ -9,7 +9,7 @@ import static com.nvidia.cuvs.lucene.TestDataProvider.TEXT_FIELD;
 import static com.nvidia.cuvs.lucene.TestDataProvider.VECTOR_FIELD1;
 import static com.nvidia.cuvs.lucene.TestDataProvider.VECTOR_FIELD2;
 import static com.nvidia.cuvs.lucene.TestUtils.createWriter;
-import static com.nvidia.cuvs.lucene.TestUtils.generateExpectedResults;
+import static com.nvidia.cuvs.lucene.TestUtils.generateExpectedTopK;
 import static org.apache.lucene.index.VectorSimilarityFunction.EUCLIDEAN;
 
 import java.io.IOException;
@@ -91,7 +91,7 @@ public class TestCuVSRandomizedVectorSearch extends LuceneTestCase {
     float[][] queries = dataProvider.getQueries(numQueries);
 
     // Generate queries and expected results for each
-    List<List<Integer>> expected = generateExpectedResults(topK, dataset, queries);
+    List<List<Integer>> expected = generateExpectedTopK(topK, dataset, queries);
 
     for (int i = 0; i < numQueries; i++) {
       log.log(Level.FINE, "Running query: " + (i + 1) + " of " + numQueries);

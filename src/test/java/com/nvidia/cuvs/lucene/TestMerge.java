@@ -6,6 +6,9 @@ package com.nvidia.cuvs.lucene;
 
 import static com.nvidia.cuvs.lucene.TestDataProvider.ID_FIELD;
 import static com.nvidia.cuvs.lucene.TestDataProvider.VECTOR_FIELD1;
+import static com.nvidia.cuvs.lucene.TestUtils.createWriter;
+import static com.nvidia.cuvs.lucene.TestUtils.createWriterConfig;
+import static com.nvidia.cuvs.lucene.TestUtils.generateRandomText;
 import static org.apache.lucene.index.VectorSimilarityFunction.EUCLIDEAN;
 import static org.apache.lucene.tests.util.TestUtil.alwaysKnnVectorsFormat;
 
@@ -116,7 +119,7 @@ public class TestMerge extends LuceneTestCase {
     List<Integer> expectedDocIds = new ArrayList<>();
     int documentsWithVectors = 0;
 
-    try (RandomIndexWriter writer = TestUtils.createWriter(random, directory, codec)) {
+    try (RandomIndexWriter writer = createWriter(random, directory, codec)) {
       // Add documents in multiple batches to create many segments
       for (int batch = 0; batch < totalBatches; batch++) {
         for (int i = 0; i < docsPerBatch; i++) {
@@ -230,7 +233,7 @@ public class TestMerge extends LuceneTestCase {
         doc.add(new StringField(ID_FIELD, String.valueOf(i), Field.Store.YES));
         doc.add(new StringField(ORIGINAL_ORDER, String.valueOf(i), Field.Store.YES));
 
-        String textSortKey = TestUtils.generateRandomText(random, dataProvider.getRandom(4, 21));
+        String textSortKey = generateRandomText(random, dataProvider.getRandom(4, 21));
         doc.add(new SortedDocValuesField(SORT_FIELD_NAME, new BytesRef(textSortKey)));
         doc.add(new StringField(SORT_FIELD_NAME + "_stored", textSortKey, Field.Store.YES));
 
@@ -523,7 +526,7 @@ public class TestMerge extends LuceneTestCase {
   @Test
   public void testMergeWithMissingVectors() throws IOException {
     int numSegments = dataProvider.getRandom(3, 13);
-    IndexWriterConfig config = TestUtils.createWriterConfig(random, codec);
+    IndexWriterConfig config = createWriterConfig(random, codec);
     log.log(Level.FINE, "Randomized parameters: numSegments=" + numSegments);
 
     int totalExpectedVectors = 0;
@@ -635,7 +638,7 @@ public class TestMerge extends LuceneTestCase {
             + ", deletionProbability="
             + deletionProbability);
 
-    IndexWriterConfig config = TestUtils.createWriterConfig(random, codec);
+    IndexWriterConfig config = createWriterConfig(random, codec);
     List<Integer> expectedRemainingDocs = new ArrayList<>();
     List<Integer> deletedDocs = new ArrayList<>();
     int totalDocuments = numSegments * docsPerSegment;

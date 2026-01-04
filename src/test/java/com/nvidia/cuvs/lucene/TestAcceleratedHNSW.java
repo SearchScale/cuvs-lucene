@@ -8,7 +8,7 @@ import static com.nvidia.cuvs.lucene.TestDataProvider.ID_FIELD;
 import static com.nvidia.cuvs.lucene.TestDataProvider.VECTOR_FIELD1;
 import static com.nvidia.cuvs.lucene.TestDataProvider.VECTOR_FIELD2;
 import static com.nvidia.cuvs.lucene.TestUtils.createWriter;
-import static com.nvidia.cuvs.lucene.TestUtils.generateExpectedResults;
+import static com.nvidia.cuvs.lucene.TestUtils.generateExpectedTopK;
 import static org.apache.lucene.index.VectorSimilarityFunction.EUCLIDEAN;
 
 import com.nvidia.cuvs.CagraIndexParams.CagraGraphBuildAlgo;
@@ -124,7 +124,7 @@ public class TestAcceleratedHNSW extends LuceneTestCase {
 
       log.log(Level.FINE, "Search results (" + results.totalHits + " total hits):");
       List<List<Integer>> expected =
-          generateExpectedResults(topK, dataset, new float[][] {queryVector});
+          generateExpectedTopK(topK, dataset, new float[][] {queryVector});
 
       for (int i = 0; i < results.scoreDocs.length; i++) {
         ScoreDoc scoreDoc = results.scoreDocs[i];

@@ -24,7 +24,7 @@ import org.apache.lucene.tests.index.RandomIndexWriter;
 
 public class TestUtils {
 
-  protected static Logger log = Logger.getLogger(TestUtils.class.getName());
+  private static final Logger log = Logger.getLogger(TestUtils.class.getName());
 
   public static float[][] generateRandomVectors(Random random, int size, int dimensions) {
     float[][] dataset = new float[size][dimensions];
@@ -36,11 +36,7 @@ public class TestUtils {
     return dataset;
   }
 
-  public static float[] generateRandomVector(Random random, int dimensions) {
-    return generateRandomVectors(random, 1, dimensions)[0];
-  }
-
-  public static List<List<Integer>> generateExpectedResults(
+  public static List<List<Integer>> generateExpectedTopK(
       int topK, float[][] dataset, float[][] queries) {
     List<List<Integer>> neighborsResult = new ArrayList<>();
     int dimensions = dataset[0].length;
@@ -71,26 +67,6 @@ public class TestUtils {
     return neighborsResult;
   }
 
-  public static List<Integer> calculateExpectedTopK(float[] query, int topK, float[][] dataset) {
-    Map<Integer, Double> distances = new TreeMap<>();
-
-    // Calculate distances only for documents that have vectors (even-numbered)
-    for (int i = 0; i < dataset.length; i += 2) {
-      double distance = 0;
-      for (int j = 0; j < dataset[0].length; j++) {
-        distance += (query[j] - dataset[i][j]) * (query[j] - dataset[i][j]);
-      }
-      distances.put(i, distance);
-    }
-
-    // Sort by distance and return top-k
-    return distances.entrySet().stream()
-        .sorted(Map.Entry.comparingByValue())
-        .map(Map.Entry::getKey)
-        .limit(topK)
-        .toList();
-  }
-
   public static RandomIndexWriter createWriter(Random random, Directory directory, Codec codec)
       throws IOException {
     return new RandomIndexWriter(
@@ -107,7 +83,6 @@ public class TestUtils {
         .setMergePolicy(newTieredMergePolicy());
   }
 
-  /** Helper method to generate random text strings for sorting */
   public static String generateRandomText(Random random, int length) {
     StringBuilder sb = new StringBuilder(length);
     String chars = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789";
