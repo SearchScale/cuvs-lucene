@@ -4,7 +4,6 @@
  */
 package com.nvidia.cuvs.lucene;
 
-import static com.nvidia.cuvs.lucene.TestUtils.generateQueries;
 import static com.nvidia.cuvs.lucene.TestUtils.generateRandomVectors;
 
 import java.util.Random;
@@ -69,11 +68,11 @@ public class TestDataProvider {
   }
 
   public float[][] getQueries(int numQueries) {
-    return generateQueries(random, dimensions, numQueries);
+    return generateRandomVectors(random, numQueries, dimensions);
   }
 
   public float[][] getVectors(int numVectors) {
-    return generateRandomVectors(random, dimensions, numVectors);
+    return generateRandomVectors(random, numVectors, dimensions);
   }
 
   public int getRandom(int min, int max) {

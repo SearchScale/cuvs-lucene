@@ -40,17 +40,6 @@ public class TestUtils {
     return generateRandomVectors(random, 1, dimensions)[0];
   }
 
-  public static float[][] generateQueries(Random random, int dimensions, int numQueries) {
-    // Generate random query vectors
-    float[][] queries = new float[numQueries][dimensions];
-    for (int i = 0; i < numQueries; i++) {
-      for (int j = 0; j < dimensions; j++) {
-        queries[i][j] = random.nextFloat() * 100;
-      }
-    }
-    return queries;
-  }
-
   public static List<List<Integer>> generateExpectedResults(
       int topK, float[][] dataset, float[][] queries) {
     List<List<Integer>> neighborsResult = new ArrayList<>();
@@ -116,26 +105,6 @@ public class TestUtils {
     return newIndexWriterConfig(new MockAnalyzer(random, MockTokenizer.SIMPLE, true))
         .setCodec(codec)
         .setMergePolicy(newTieredMergePolicy());
-  }
-
-  /** Helper method to generate random vectors */
-  public static float[] generateRandomVector(int dimension, Random random) {
-    float[] vector = new float[dimension];
-    for (int i = 0; i < dimension; i++) {
-      vector[i] = (float) random.nextGaussian();
-    }
-    // Normalize the vector
-    float norm = 0.0f;
-    for (float v : vector) {
-      norm += v * v;
-    }
-    norm = (float) Math.sqrt(norm);
-    if (norm > 0) {
-      for (int i = 0; i < dimension; i++) {
-        vector[i] /= norm;
-      }
-    }
-    return vector;
   }
 
   /** Helper method to generate random text strings for sorting */

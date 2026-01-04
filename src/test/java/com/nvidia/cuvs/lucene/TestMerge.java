@@ -9,10 +9,14 @@ import static com.nvidia.cuvs.lucene.TestDataProvider.VECTOR_FIELD1;
 import static org.apache.lucene.index.VectorSimilarityFunction.EUCLIDEAN;
 import static org.apache.lucene.tests.util.TestUtil.alwaysKnnVectorsFormat;
 
+import com.nvidia.cuvs.CagraIndexParams.CagraGraphBuildAlgo;
+import com.nvidia.cuvs.lucene.CuVS2510GPUVectorsWriter.IndexType;
 import java.io.IOException;
 import java.util.ArrayList;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Random;
+import java.util.Set;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 import org.apache.lucene.codecs.Codec;
@@ -729,7 +733,7 @@ public class TestMerge extends LuceneTestCase {
 
       // Test vector search works after deletions
       float[] queryVector = dataProvider.getQueries(1)[0];
-      int topK = Math.min(dataProvider.getTopK(), numDocsWithVectors);
+      int topK = Math.min(1, numDocsWithVectors);
       KnnFloatVectorQuery vectorQuery = new KnnFloatVectorQuery(VECTOR_FIELD1, queryVector, topK);
       TopDocs vectorResults = searcher.search(vectorQuery, topK);
       int numResults = vectorResults.scoreDocs.length;
@@ -739,466 +743,416 @@ public class TestMerge extends LuceneTestCase {
     }
   }
 
-  //  /**
-  //   * Test merging segments for {@link IndexType#BRUTE_FORCE}
-  //   * */
-  //  @Test
-  //  public void testMergeBruteForceIndex() throws IOException {
-  //    log.log(Level.FINE, "Starting testMergeBruteForceIndex");
-  //
-  //    // Randomize configuration parameters
-  //    int maxBufferedDocs = 8 + random().nextInt(8); // 8-15 docs per buffer
-  //    int numSegments = 3 + random().nextInt(3); // 3-5 segments
-  //    int docsPerSegment = 12 + random().nextInt(9); // 12-20 docs per segment
-  //    double vectorProbability = 0.8 + (random().nextDouble() * 0.2); // 80-100% have vectors
-  //
-  //    log.log(
-  //        Level.FINE,
-  //        "Randomized parameters: maxBufferedDocs="
-  //            + maxBufferedDocs
-  //            + ", numSegments="
-  //            + numSegments
-  //            + ", docsPerSegment="
-  //            + docsPerSegment
-  //            + ", vectorProbability="
-  //            + vectorProbability);
-  //
-  //    // Configure with brute force index type
-  //    CuVS2510GPUVectorsFormat bruteForceFormat =
-  //        new CuVS2510GPUVectorsFormat(
-  //            32, // writer threads
-  //            128, // intermediate graph degree
-  //            64, // graph degree
-  //            CagraGraphBuildAlgo.NN_DESCENT,
-  //            IndexType.BRUTE_FORCE); // Use brute force index
-  //
-  //    IndexWriterConfig config =
-  //        new IndexWriterConfig()
-  //            .setCodec(alwaysKnnVectorsFormat(bruteForceFormat))
-  //            .setMaxBufferedDocs(maxBufferedDocs)
-  //            .setRAMBufferSizeMB(IndexWriterConfig.DISABLE_AUTO_FLUSH);
-  //
-  //    int totalDocuments = numSegments * docsPerSegment;
-  //    int totalExpectedVectors = 0;
-  //
-  //    try (IndexWriter writer = new IndexWriter(directory, config)) {
-  //      // Create multiple segments with brute force index
-  //      for (int seg = 0; seg < numSegments; seg++) {
-  //        int segmentVectorCount = 0;
-  //
-  //        for (int i = 0; i < docsPerSegment; i++) {
-  //          int docId = seg * docsPerSegment + i;
-  //          Document doc = new Document();
-  //          doc.add(new StringField("id", String.valueOf(docId), Field.Store.YES));
-  //          doc.add(new StringField("segment", "seg_" + seg, Field.Store.YES));
-  //          doc.add(new NumericDocValuesField("segment_num", seg));
-  //          doc.add(new NumericDocValuesField("doc_in_segment", i));
-  //
-  //          // Randomly add vectors based on probability
-  //          if (random().nextDouble() < vectorProbability) {
-  //            float[] vector = generateRandomVector(vectorDimension, random());
-  //            doc.add(new KnnFloatVectorField("vector", vector, VectorSimilarityFunction.COSINE));
-  //            segmentVectorCount++;
-  //          }
-  //
-  //          writer.addDocument(doc);
-  //        }
-  //
-  //        writer.commit();
-  //        totalExpectedVectors += segmentVectorCount;
-  //
-  //        log.log(
-  //            Level.FINE,
-  //            "Created brute force segment "
-  //                + seg
-  //                + ": "
-  //                + docsPerSegment
-  //                + " documents, "
-  //                + segmentVectorCount
-  //                + " with vectors");
-  //      }
-  //
-  //      log.log(
-  //          Level.FINE,
-  //          "Created "
-  //              + numSegments
-  //              + " brute force segments with "
-  //              + totalDocuments
-  //              + " total documents and "
-  //              + totalExpectedVectors
-  //              + " vectors");
-  //
-  //      // Force merge all brute force segments
-  //      writer.forceMerge(1);
-  //      log.log(Level.FINE, "Forced merge of brute force segments completed");
-  //    }
-  //
-  //    // Verify the merged brute force index
-  //    try (DirectoryReader reader = DirectoryReader.open(directory)) {
-  //      assertEquals("Should have exactly one segment after merge", 1, reader.leaves().size());
-  //
-  //      LeafReader leafReader = reader.leaves().get(0).reader();
-  //      assertEquals("Total documents should match", totalDocuments, leafReader.maxDoc());
-  //
-  //      // Count actual vectors in merged index
-  //      var vectorValues = leafReader.getFloatVectorValues("vector");
-  //      int actualVectorCount = vectorValues != null ? vectorValues.size() : 0;
-  //
-  //      log.log(
-  //          Level.FINE,
-  //          "Brute force merge results: Total documents: "
-  //              + totalDocuments
-  //              + ", Expected vectors: "
-  //              + totalExpectedVectors
-  //              + ", Actual vectors: "
-  //              + actualVectorCount);
-  //
-  //      assertEquals("Vector count should match expected", totalExpectedVectors,
-  // actualVectorCount);
-  //
-  //      // Test brute force vector search (exact search)
-  //      if (actualVectorCount > 0) {
-  //        IndexSearcher searcher = new IndexSearcher(reader);
-  //        float[] queryVector = generateRandomVector(vectorDimension, random());
-  //
-  //        // Search for reasonable number of results
-  //        int searchK = Math.min(8 + random().nextInt(8), Math.min(actualVectorCount,
-  // TOP_K_LIMIT));
-  //
-  //        KnnFloatVectorQuery vectorQuery = new KnnFloatVectorQuery("vector", queryVector,
-  // searchK);
-  //        TopDocs vectorResults = searcher.search(vectorQuery, searchK);
-  //
-  //        assertTrue(
-  //            "Should find some vector results in brute force index",
-  //            vectorResults.scoreDocs.length > 0);
-  //        assertTrue(
-  //            "Should not find more vectors than exist",
-  //            vectorResults.scoreDocs.length <= actualVectorCount);
-  //
-  //        log.log(
-  //            Level.FINE,
-  //            "Brute force search found "
-  //                + vectorResults.scoreDocs.length
-  //                + " results out of "
-  //                + actualVectorCount
-  //                + " available vectors");
-  //
-  //        // Verify all returned documents are valid
-  //        for (ScoreDoc scoreDoc : vectorResults.scoreDocs) {
-  //          String docId = searcher.storedFields().document(scoreDoc.doc).get("id");
-  //          assertNotNull("Document should have valid ID", docId);
-  //          assertTrue("Score should be positive", scoreDoc.score > 0);
-  //        }
-  //      } else {
-  //        log.log(Level.FINE, "No vectors in brute force merged index - skipping vector search");
-  //      }
-  //
-  //      log.log(Level.FINE, "Brute force merge verification completed successfully");
-  //    }
-  //  }
-  //
-  //  /**
-  //   * Test merging segments for {@link IndexType#CAGRA_AND_BRUTE_FORCE}
-  //   * */
-  //  @Test
-  //  public void testMergeCagraAndBruteForceIndex() throws IOException {
-  //    log.log(Level.FINE, "Starting testMergeCagraAndBruteForceIndex");
-  //
-  //    // Use moderate dataset size
-  //    int maxBufferedDocs = 15 + random().nextInt(10); // 15-24 docs per buffer
-  //    int numSegments =
-  //        4; // Fixed 4 segments: alternating CAGRA vs small segments (brute force fallback)
-  //    int docsPerSegment = 20 + random().nextInt(11); // 20-30 docs per segment
-  //    double vectorProbability = 0.9 + (random().nextDouble() * 0.1); // 90-100% have vectors
-  //
-  //    log.log(
-  //        Level.FINE,
-  //        "Randomized parameters: maxBufferedDocs="
-  //            + maxBufferedDocs
-  //            + ", numSegments="
-  //            + numSegments
-  //            + ", docsPerSegment="
-  //            + docsPerSegment
-  //            + ", vectorProbability="
-  //            + vectorProbability);
-  //
-  //    // Configure with CAGRA + brute force combined index type
-  //    CuVS2510GPUVectorsFormat combinedFormat =
-  //        new CuVS2510GPUVectorsFormat(
-  //            32, // writer threads
-  //            128, // intermediate graph degree
-  //            64, // graph degree
-  //            CagraGraphBuildAlgo.NN_DESCENT,
-  //            IndexType.CAGRA_AND_BRUTE_FORCE); // Use combined CAGRA + brute force
-  //
-  //    IndexWriterConfig config =
-  //        new IndexWriterConfig()
-  //            .setCodec(alwaysKnnVectorsFormat(combinedFormat))
-  //            .setMaxBufferedDocs(maxBufferedDocs)
-  //            .setRAMBufferSizeMB(IndexWriterConfig.DISABLE_AUTO_FLUSH);
-  //
-  //    int totalDocuments = numSegments * docsPerSegment;
-  //    int totalExpectedVectors = 0;
-  //
-  //    try (IndexWriter writer = new IndexWriter(directory, config)) {
-  //      // Create segments that will result in mixed index types during merge
-  //      for (int seg = 0; seg < numSegments; seg++) {
-  //        int segmentVectorCount = 0;
-  //
-  //        for (int i = 0; i < docsPerSegment; i++) {
-  //          int docId = seg * docsPerSegment + i;
-  //          Document doc = new Document();
-  //          doc.add(new StringField("id", String.valueOf(docId), Field.Store.YES));
-  //          doc.add(new StringField("segment", "mixed_seg_" + seg, Field.Store.YES));
-  //          doc.add(new StringField("index_type", "cagra_and_brute_force", Field.Store.YES));
-  //          doc.add(new NumericDocValuesField("segment_num", seg));
-  //          doc.add(new NumericDocValuesField("doc_in_segment", i));
-  //
-  //          // Add vectors based on probability
-  //          if (random().nextDouble() < vectorProbability) {
-  //            float[] vector = generateRandomVector(vectorDimension, random());
-  //            doc.add(new KnnFloatVectorField("vector", vector, VectorSimilarityFunction.COSINE));
-  //            segmentVectorCount++;
-  //          }
-  //
-  //          writer.addDocument(doc);
-  //        }
-  //
-  //        writer.commit();
-  //        totalExpectedVectors += segmentVectorCount;
-  //
-  //        log.log(
-  //            Level.FINE,
-  //            "Created CAGRA+brute force segment "
-  //                + seg
-  //                + ": "
-  //                + docsPerSegment
-  //                + " documents, "
-  //                + segmentVectorCount
-  //                + " with vectors");
-  //      }
-  //
-  //      log.log(
-  //          Level.FINE,
-  //          "Created "
-  //              + numSegments
-  //              + " CAGRA+brute force segments with "
-  //              + totalDocuments
-  //              + " total documents and "
-  //              + totalExpectedVectors
-  //              + " vectors");
-  //
-  //      // Force merge all CAGRA+brute force segments
-  //      writer.forceMerge(1);
-  //      log.log(Level.FINE, "Forced merge of CAGRA+brute force segments completed");
-  //    }
-  //
-  //    // Verify the merged CAGRA+brute force index
-  //    try (DirectoryReader reader = DirectoryReader.open(directory)) {
-  //      assertEquals("Should have exactly one segment after merge", 1, reader.leaves().size());
-  //
-  //      LeafReader leafReader = reader.leaves().get(0).reader();
-  //      assertEquals("Total documents should match", totalDocuments, leafReader.maxDoc());
-  //
-  //      // Count actual vectors in merged index
-  //      var vectorValues = leafReader.getFloatVectorValues("vector");
-  //      int actualVectorCount = vectorValues != null ? vectorValues.size() : 0;
-  //
-  //      log.log(
-  //          Level.FINE,
-  //          "CAGRA+brute force merge results: Total documents: "
-  //              + totalDocuments
-  //              + ", Expected vectors: "
-  //              + totalExpectedVectors
-  //              + ", Actual vectors: "
-  //              + actualVectorCount);
-  //
-  //      assertEquals("Vector count should match expected", totalExpectedVectors,
-  // actualVectorCount);
-  //
-  //      // Test CAGRA+brute force index vector search
-  //      if (actualVectorCount > 0) {
-  //        IndexSearcher searcher = new IndexSearcher(reader);
-  //        float[] queryVector = generateRandomVector(vectorDimension, random());
-  //
-  //        // Search for reasonable number of results
-  //        int searchK = Math.min(12 + random().nextInt(8), Math.min(actualVectorCount,
-  // TOP_K_LIMIT));
-  //
-  //        KnnFloatVectorQuery vectorQuery = new KnnFloatVectorQuery("vector", queryVector,
-  // searchK);
-  //        TopDocs vectorResults = searcher.search(vectorQuery, searchK);
-  //
-  //        assertTrue(
-  //            "Should find some vector results in CAGRA+brute force index",
-  //            vectorResults.scoreDocs.length > 0);
-  //        assertTrue(
-  //            "Should not find more vectors than exist",
-  //            vectorResults.scoreDocs.length <= actualVectorCount);
-  //
-  //        log.log(
-  //            Level.FINE,
-  //            "CAGRA+brute force index search found "
-  //                + vectorResults.scoreDocs.length
-  //                + " results out of "
-  //                + actualVectorCount
-  //                + " available vectors");
-  //
-  //        // Verify all returned documents are valid and have expected metadata
-  //        for (ScoreDoc scoreDoc : vectorResults.scoreDocs) {
-  //          Document resultDoc = searcher.storedFields().document(scoreDoc.doc);
-  //          String docId = resultDoc.get("id");
-  //          String indexType = resultDoc.get("index_type");
-  //
-  //          assertNotNull("Document should have valid ID", docId);
-  //          assertEquals(
-  //              "Document should be marked as CAGRA+brute force index type",
-  //              "cagra_and_brute_force",
-  //              indexType);
-  //          assertTrue("Score should be positive", scoreDoc.score > 0);
-  //        }
-  //
-  //        // Test that the CAGRA+brute force index handles both approximate and exact search
-  //        // consistently
-  //        for (int trial = 0; trial < 3; trial++) {
-  //          float[] trialQueryVector = generateRandomVector(vectorDimension, random());
-  //          KnnFloatVectorQuery trialQuery =
-  //              new KnnFloatVectorQuery("vector", trialQueryVector, Math.min(5,
-  // actualVectorCount));
-  //          TopDocs trialResults = searcher.search(trialQuery, Math.min(5, actualVectorCount));
-  //
-  //          assertTrue("Trial " + trial + " should find results", trialResults.scoreDocs.length >
-  // 0);
-  //          log.log(
-  //              Level.FINE,
-  //              "Trial " + trial + " found " + trialResults.scoreDocs.length + " results");
-  //        }
-  //      } else {
-  //        log.log(
-  //            Level.FINE, "No vectors in CAGRA+brute force merged index - skipping vector
-  // search");
-  //      }
-  //
-  //      log.log(Level.FINE, "CAGRA+brute force merge verification completed successfully");
-  //    }
-  //  }
-  //
-  //  /**
-  //   * Test large scale merge to stress test the system
-  //   **/
-  //  @Test
-  //  public void testLargeScaleMerge() throws IOException {
-  //    assumeTrue(
-  //        "testLargeScaleMerge requires -DlargeScale=true",
-  //        Boolean.parseBoolean(System.getProperty("largeScale", "false")));
-  //
-  //    log.log(Level.FINE, "Starting testLargeScaleMerge");
-  //
-  //    // Randomize large scale parameters
-  //    int maxBufferedDocs = 40 + random().nextInt(21); // 40-60 docs per buffer
-  //    int segmentCount = 15 + random().nextInt(11); // 15-25 segments
-  //    int docsPerSegment = 30 + random().nextInt(21); // 30-50 docs per segment
-  //    int totalDocuments = segmentCount * docsPerSegment;
-  //
-  //    log.log(
-  //        Level.FINE,
-  //        "Randomized large scale parameters: maxBufferedDocs="
-  //            + maxBufferedDocs
-  //            + ", segmentCount="
-  //            + segmentCount
-  //            + ", docsPerSegment="
-  //            + docsPerSegment
-  //            + ", totalDocuments="
-  //            + totalDocuments);
-  //
-  //    IndexWriterConfig config =
-  //        new IndexWriterConfig()
-  //            .setCodec(alwaysKnnVectorsFormat(new CuVS2510GPUVectorsFormat()))
-  //            .setMaxBufferedDocs(maxBufferedDocs)
-  //            .setRAMBufferSizeMB(IndexWriterConfig.DISABLE_AUTO_FLUSH);
-  //
-  //    try (IndexWriter writer = new IndexWriter(directory, config)) {
-  //      for (int seg = 0; seg < segmentCount; seg++) {
-  //        log.log(Level.FINE, "Creating segment " + (seg + 1) + "/" + segmentCount);
-  //
-  //        // Randomize vector probability per segment
-  //        double vectorProbability =
-  //            0.5 + (random().nextDouble() * 0.4); // 50-90% vectors per segment
-  //
-  //        for (int i = 0; i < docsPerSegment; i++) {
-  //          int docId = seg * docsPerSegment + i;
-  //          Document doc = new Document();
-  //          doc.add(new StringField("id", String.valueOf(docId), Field.Store.YES));
-  //          doc.add(new NumericDocValuesField("segment", seg));
-  //          doc.add(new NumericDocValuesField("position", i));
-  //
-  //          // Add vector based on segment's randomized probability
-  //          if (random().nextDouble() < vectorProbability) {
-  //            float[] vector = generateRandomVector(vectorDimension, random());
-  //            doc.add(new KnnFloatVectorField("vector", vector, VectorSimilarityFunction.COSINE));
-  //          }
-  //
-  //          writer.addDocument(doc);
-  //        }
-  //        writer.commit();
-  //      }
-  //
-  //      log.log(
-  //          Level.FINE,
-  //          "Created " + segmentCount + " segments with " + totalDocuments + " total documents");
-  //
-  //      // Force merge all segments
-  //      long startTime = System.currentTimeMillis();
-  //      writer.forceMerge(1);
-  //      long mergeTime = System.currentTimeMillis() - startTime;
-  //
-  //      log.log(Level.FINE, "Large scale merge completed in " + mergeTime + "ms");
-  //    }
-  //
-  //    // Verify the large merged index
-  //    try (DirectoryReader reader = DirectoryReader.open(directory)) {
-  //      assertEquals("Should have exactly one segment after merge", 1, reader.leaves().size());
-  //
-  //      LeafReader leafReader = reader.leaves().get(0).reader();
-  //      assertEquals("Total documents should match", totalDocuments, leafReader.maxDoc());
-  //
-  //      // Test vector search performance
-  //      var vectorValues = leafReader.getFloatVectorValues("vector");
-  //      int actualVectorCount = vectorValues != null ? vectorValues.size() : 0;
-  //
-  //      if (actualVectorCount > 0) {
-  //        IndexSearcher searcher = new IndexSearcher(reader);
-  //        float[] queryVector = generateRandomVector(vectorDimension, random());
-  //
-  //        // Randomize search parameters for large scale test
-  //        int searchK =
-  //            Math.min(20 + random().nextInt(31), Math.min(actualVectorCount, TOP_K_LIMIT)); //
-  // 20-50
-  //
-  //        long searchStart = System.currentTimeMillis();
-  //        KnnFloatVectorQuery vectorQuery = new KnnFloatVectorQuery("vector", queryVector,
-  // searchK);
-  //        TopDocs vectorResults = searcher.search(vectorQuery, searchK);
-  //        long searchTime = System.currentTimeMillis() - searchStart;
-  //
-  //        assertTrue("Should find vector results in large index", vectorResults.scoreDocs.length >
-  // 0);
-  //        log.log(
-  //            Level.FINE,
-  //            "Vector search in large index returned "
-  //                + vectorResults.scoreDocs.length
-  //                + " results out of "
-  //                + actualVectorCount
-  //                + " vectors in "
-  //                + searchTime
-  //                + "ms");
-  //      } else {
-  //        log.log(Level.FINE, "No vectors in large merged index - skipping vector search");
-  //      }
-  //
-  //      log.log(Level.FINE, "Large scale merge verification completed successfully");
-  //    }
-  //  }
+  /**
+   * Test merging segments for {@link IndexType#BRUTE_FORCE}
+   * */
+  @Test
+  public void testMergeBruteForceIndex() throws IOException {
+    int numSegments = dataProvider.getRandom(3, 10);
+    int docsPerSegment = dataProvider.getRandom(20, 100);
+    double vectorProbability = dataProvider.getRandom(0.2, 0.7);
+    int maxBufferedDocs = dataProvider.getRandom(8, 17);
 
+    log.log(
+        Level.FINE,
+        "Randomized parameters: maxBufferedDocs="
+            + maxBufferedDocs
+            + ", numSegments="
+            + numSegments
+            + ", docsPerSegment="
+            + docsPerSegment
+            + ", vectorProbability="
+            + vectorProbability);
+
+    // Configure with brute force index type
+    CuVS2510GPUVectorsFormat bruteForceFormat =
+        new CuVS2510GPUVectorsFormat(
+            32, 128, 64, CagraGraphBuildAlgo.NN_DESCENT, IndexType.BRUTE_FORCE);
+
+    IndexWriterConfig config =
+        new IndexWriterConfig()
+            .setCodec(alwaysKnnVectorsFormat(bruteForceFormat))
+            .setMaxBufferedDocs(maxBufferedDocs)
+            .setRAMBufferSizeMB(IndexWriterConfig.DISABLE_AUTO_FLUSH);
+
+    int totalDocuments = numSegments * docsPerSegment;
+    int totalExpectedVectors = 0;
+    Set<Integer> docIDsHavingVectors = new HashSet<Integer>();
+
+    try (IndexWriter writer = new IndexWriter(directory, config)) {
+      for (int seg = 0; seg < numSegments; seg++) {
+        int segmentVectorCount = 0;
+        for (int i = 0; i < docsPerSegment; i++) {
+          int docId = seg * docsPerSegment + i;
+          Document doc = new Document();
+          doc.add(new StringField(ID_FIELD, String.valueOf(docId), Field.Store.YES));
+
+          // Randomly add vectors based on probability
+          if (random.nextDouble() < vectorProbability) {
+            float[] vector = dataProvider.getVectors(1)[0];
+            doc.add(new KnnFloatVectorField(VECTOR_FIELD1, vector, EUCLIDEAN));
+            docIDsHavingVectors.add(docId);
+            segmentVectorCount++;
+          }
+          writer.addDocument(doc);
+        }
+
+        writer.commit();
+        totalExpectedVectors += segmentVectorCount;
+
+        log.log(
+            Level.FINE,
+            "Created brute force segment "
+                + seg
+                + ": "
+                + docsPerSegment
+                + " documents, "
+                + segmentVectorCount
+                + " with vectors");
+      }
+
+      log.log(
+          Level.FINE,
+          "Created "
+              + numSegments
+              + " brute force segments with "
+              + totalDocuments
+              + " total documents and "
+              + totalExpectedVectors
+              + " vectors");
+
+      // Force merge all brute force segments
+      writer.forceMerge(1);
+      log.log(Level.FINE, "Forced merge of brute force segments completed");
+    }
+
+    // Verify the merged brute force index
+    try (DirectoryReader reader = DirectoryReader.open(directory)) {
+      List<LeafReaderContext> leaves = reader.leaves();
+      assertEquals("Should have exactly one segment after merge", 1, leaves.size());
+      LeafReader leafReader = leaves.get(0).reader();
+      assertEquals("Total documents should match", totalDocuments, leafReader.maxDoc());
+
+      // Count actual vectors in merged index
+      var vectorValues = leafReader.getFloatVectorValues(VECTOR_FIELD1);
+      int actualVectorCount = vectorValues != null ? vectorValues.size() : 0;
+
+      log.log(
+          Level.FINE,
+          "Brute force merge results: Total documents: "
+              + totalDocuments
+              + ", Expected vectors: "
+              + totalExpectedVectors
+              + ", Actual vectors: "
+              + actualVectorCount);
+
+      assertEquals("Vector count should match expected", totalExpectedVectors, actualVectorCount);
+
+      // Test brute force vector search (exact search)
+      IndexSearcher searcher = new IndexSearcher(reader);
+      float[] queryVector = dataProvider.getQueries(1)[0];
+      int topK = dataProvider.getRandom(1, actualVectorCount);
+
+      KnnFloatVectorQuery vectorQuery = new KnnFloatVectorQuery(VECTOR_FIELD1, queryVector, topK);
+      TopDocs vectorResults = searcher.search(vectorQuery, topK);
+      int numResults = vectorResults.scoreDocs.length;
+      assertTrue("Should find some vector results in brute force index", numResults > 0);
+      assertTrue("Should not find more vectors than exist", numResults <= actualVectorCount);
+
+      log.log(
+          Level.FINE,
+          "Brute force search found "
+              + numResults
+              + " results out of "
+              + actualVectorCount
+              + " available vectors");
+
+      assertEquals("Search should return exactly topK documents", topK, numResults);
+      // Verify all returned documents are valid
+      for (ScoreDoc scoreDoc : vectorResults.scoreDocs) {
+        Document doc = searcher.storedFields().document(scoreDoc.doc);
+        String docId = doc.get(ID_FIELD);
+        assertNotNull("Document should have valid ID", docId);
+        assertTrue("Score should be positive", scoreDoc.score > 0);
+        assertTrue(
+            "Document does not have a vector",
+            docIDsHavingVectors.contains(Integer.parseInt(docId)));
+      }
+    }
+  }
+
+  /**
+   * Test merging segments for {@link IndexType#CAGRA}
+   * */
+  @Test
+  public void testMergeCagraIndex() throws IOException {
+    int numSegments = dataProvider.getRandom(3, 10);
+    int docsPerSegment = dataProvider.getRandom(20, 100);
+    double vectorProbability = dataProvider.getRandom(0.2, 0.7);
+    int maxBufferedDocs = dataProvider.getRandom(8, 17);
+
+    log.log(
+        Level.FINE,
+        "Randomized parameters: maxBufferedDocs="
+            + maxBufferedDocs
+            + ", numSegments="
+            + numSegments
+            + ", docsPerSegment="
+            + docsPerSegment
+            + ", vectorProbability="
+            + vectorProbability);
+
+    // Configure with CAGRA index type
+    CuVS2510GPUVectorsFormat cagraAndBruteForceFormat =
+        new CuVS2510GPUVectorsFormat(32, 128, 64, CagraGraphBuildAlgo.NN_DESCENT, IndexType.CAGRA);
+
+    IndexWriterConfig config =
+        new IndexWriterConfig()
+            .setCodec(alwaysKnnVectorsFormat(cagraAndBruteForceFormat))
+            .setMaxBufferedDocs(maxBufferedDocs)
+            .setRAMBufferSizeMB(IndexWriterConfig.DISABLE_AUTO_FLUSH);
+
+    int totalDocuments = numSegments * docsPerSegment;
+    int totalExpectedVectors = 0;
+    Set<Integer> docIDsHavingVectors = new HashSet<Integer>();
+
+    try (IndexWriter writer = new IndexWriter(directory, config)) {
+      for (int seg = 0; seg < numSegments; seg++) {
+        int segmentVectorCount = 0;
+        for (int i = 0; i < docsPerSegment; i++) {
+          int docId = seg * docsPerSegment + i;
+          Document doc = new Document();
+          doc.add(new StringField(ID_FIELD, String.valueOf(docId), Field.Store.YES));
+
+          // Randomly add vectors based on probability
+          if (random.nextDouble() < vectorProbability) {
+            float[] vector = dataProvider.getVectors(1)[0];
+            doc.add(new KnnFloatVectorField(VECTOR_FIELD1, vector, EUCLIDEAN));
+            docIDsHavingVectors.add(docId);
+            segmentVectorCount++;
+          }
+          writer.addDocument(doc);
+        }
+
+        writer.commit();
+        totalExpectedVectors += segmentVectorCount;
+
+        log.log(
+            Level.FINE,
+            "Created CAGRA segment "
+                + seg
+                + ": "
+                + docsPerSegment
+                + " documents, "
+                + segmentVectorCount
+                + " with vectors");
+      }
+
+      log.log(
+          Level.FINE,
+          "Created "
+              + numSegments
+              + " CAGRA segments with "
+              + totalDocuments
+              + " total documents and "
+              + totalExpectedVectors
+              + " vectors");
+
+      // Force merge all CAGRA segments
+      writer.forceMerge(1);
+      log.log(Level.FINE, "Forced merge of brute force segments completed");
+    }
+
+    // Verify the merged CAGRA index
+    try (DirectoryReader reader = DirectoryReader.open(directory)) {
+      List<LeafReaderContext> leaves = reader.leaves();
+      assertEquals("Should have exactly one segment after merge", 1, leaves.size());
+      LeafReader leafReader = leaves.get(0).reader();
+      assertEquals("Total documents should match", totalDocuments, leafReader.maxDoc());
+
+      // Count actual vectors in merged index
+      var vectorValues = leafReader.getFloatVectorValues(VECTOR_FIELD1);
+      int actualVectorCount = vectorValues != null ? vectorValues.size() : 0;
+
+      log.log(
+          Level.FINE,
+          "CAGRA merge results: Total documents: "
+              + totalDocuments
+              + ", Expected vectors: "
+              + totalExpectedVectors
+              + ", Actual vectors: "
+              + actualVectorCount);
+
+      assertEquals("Vector count should match expected", totalExpectedVectors, actualVectorCount);
+
+      // Test CAGRA vector search (exact search)
+      IndexSearcher searcher = new IndexSearcher(reader);
+      float[] queryVector = dataProvider.getQueries(1)[0];
+      int topK = dataProvider.getRandom(1, actualVectorCount);
+
+      KnnFloatVectorQuery vectorQuery = new KnnFloatVectorQuery(VECTOR_FIELD1, queryVector, topK);
+      TopDocs vectorResults = searcher.search(vectorQuery, topK);
+      int numResults = vectorResults.scoreDocs.length;
+      assertTrue("Should find some vector results in CAGRA + brute force index", numResults > 0);
+      assertTrue("Should not find more vectors than exist", numResults <= actualVectorCount);
+
+      log.log(
+          Level.FINE,
+          "CAGRA search found "
+              + numResults
+              + " results out of "
+              + actualVectorCount
+              + " available vectors");
+
+      assertEquals("Search should return exactly topK documents", topK, numResults);
+      // Verify all returned documents are valid
+      for (ScoreDoc scoreDoc : vectorResults.scoreDocs) {
+        Document doc = searcher.storedFields().document(scoreDoc.doc);
+        String docId = doc.get(ID_FIELD);
+        assertNotNull("Document should have valid ID", docId);
+        assertTrue("Score should be positive", scoreDoc.score > 0);
+        assertTrue(
+            "Document does not have a vector",
+            docIDsHavingVectors.contains(Integer.parseInt(docId)));
+      }
+    }
+  }
+
+  /**
+   * Test merging segments for {@link IndexType#CAGRA_AND_BRUTE_FORCE}
+   * */
+  @Test
+  public void testMergeCagraAndBruteForceIndex() throws IOException {
+    int numSegments = dataProvider.getRandom(3, 10);
+    int docsPerSegment = dataProvider.getRandom(20, 100);
+    double vectorProbability = dataProvider.getRandom(0.2, 0.7);
+    int maxBufferedDocs = dataProvider.getRandom(8, 17);
+
+    log.log(
+        Level.FINE,
+        "Randomized parameters: maxBufferedDocs="
+            + maxBufferedDocs
+            + ", numSegments="
+            + numSegments
+            + ", docsPerSegment="
+            + docsPerSegment
+            + ", vectorProbability="
+            + vectorProbability);
+
+    // Configure with CAGRA + brute force index type
+    CuVS2510GPUVectorsFormat cagraAndBruteForceFormat =
+        new CuVS2510GPUVectorsFormat(
+            32, 128, 64, CagraGraphBuildAlgo.NN_DESCENT, IndexType.CAGRA_AND_BRUTE_FORCE);
+
+    IndexWriterConfig config =
+        new IndexWriterConfig()
+            .setCodec(alwaysKnnVectorsFormat(cagraAndBruteForceFormat))
+            .setMaxBufferedDocs(maxBufferedDocs)
+            .setRAMBufferSizeMB(IndexWriterConfig.DISABLE_AUTO_FLUSH);
+
+    int totalDocuments = numSegments * docsPerSegment;
+    int totalExpectedVectors = 0;
+    Set<Integer> docIDsHavingVectors = new HashSet<Integer>();
+
+    try (IndexWriter writer = new IndexWriter(directory, config)) {
+      for (int seg = 0; seg < numSegments; seg++) {
+        int segmentVectorCount = 0;
+        for (int i = 0; i < docsPerSegment; i++) {
+          int docId = seg * docsPerSegment + i;
+          Document doc = new Document();
+          doc.add(new StringField(ID_FIELD, String.valueOf(docId), Field.Store.YES));
+
+          // Randomly add vectors based on probability
+          if (random.nextDouble() < vectorProbability) {
+            float[] vector = dataProvider.getVectors(1)[0];
+            doc.add(new KnnFloatVectorField(VECTOR_FIELD1, vector, EUCLIDEAN));
+            docIDsHavingVectors.add(docId);
+            segmentVectorCount++;
+          }
+          writer.addDocument(doc);
+        }
+
+        writer.commit();
+        totalExpectedVectors += segmentVectorCount;
+
+        log.log(
+            Level.FINE,
+            "Created CAGRA + brute force segment "
+                + seg
+                + ": "
+                + docsPerSegment
+                + " documents, "
+                + segmentVectorCount
+                + " with vectors");
+      }
+
+      log.log(
+          Level.FINE,
+          "Created "
+              + numSegments
+              + " CAGRA + brute force segments with "
+              + totalDocuments
+              + " total documents and "
+              + totalExpectedVectors
+              + " vectors");
+
+      // Force merge all CAGRA + brute force segments
+      writer.forceMerge(1);
+      log.log(Level.FINE, "Forced merge of brute force segments completed");
+    }
+
+    // Verify the merged CAGRA + brute force index
+    try (DirectoryReader reader = DirectoryReader.open(directory)) {
+      List<LeafReaderContext> leaves = reader.leaves();
+      assertEquals("Should have exactly one segment after merge", 1, leaves.size());
+      LeafReader leafReader = leaves.get(0).reader();
+      assertEquals("Total documents should match", totalDocuments, leafReader.maxDoc());
+
+      // Count actual vectors in merged index
+      var vectorValues = leafReader.getFloatVectorValues(VECTOR_FIELD1);
+      int actualVectorCount = vectorValues != null ? vectorValues.size() : 0;
+
+      log.log(
+          Level.FINE,
+          "CAGRA + brute force merge results: Total documents: "
+              + totalDocuments
+              + ", Expected vectors: "
+              + totalExpectedVectors
+              + ", Actual vectors: "
+              + actualVectorCount);
+
+      assertEquals("Vector count should match expected", totalExpectedVectors, actualVectorCount);
+
+      // Test CAGRA + brute force vector search (exact search)
+      IndexSearcher searcher = new IndexSearcher(reader);
+      float[] queryVector = dataProvider.getQueries(1)[0];
+      int topK = dataProvider.getRandom(1, actualVectorCount);
+
+      KnnFloatVectorQuery vectorQuery = new KnnFloatVectorQuery(VECTOR_FIELD1, queryVector, topK);
+      TopDocs vectorResults = searcher.search(vectorQuery, topK);
+      int numResults = vectorResults.scoreDocs.length;
+      assertTrue("Should find some vector results in CAGRA + brute force index", numResults > 0);
+      assertTrue("Should not find more vectors than exist", numResults <= actualVectorCount);
+
+      log.log(
+          Level.FINE,
+          "CAGRA + Brute force search found "
+              + numResults
+              + " results out of "
+              + actualVectorCount
+              + " available vectors");
+
+      assertEquals("Search should return exactly topK documents", topK, numResults);
+      // Verify all returned documents are valid
+      for (ScoreDoc scoreDoc : vectorResults.scoreDocs) {
+        Document doc = searcher.storedFields().document(scoreDoc.doc);
+        String docId = doc.get(ID_FIELD);
+        assertNotNull("Document should have valid ID", docId);
+        assertTrue("Score should be positive", scoreDoc.score > 0);
+        assertTrue(
+            "Document does not have a vector",
+            docIDsHavingVectors.contains(Integer.parseInt(docId)));
+      }
+    }
+  }
 }
