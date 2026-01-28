@@ -19,7 +19,6 @@ import com.nvidia.cuvs.BruteForceIndex;
 import com.nvidia.cuvs.BruteForceIndexParams;
 import com.nvidia.cuvs.CagraIndex;
 import com.nvidia.cuvs.CagraIndexParams;
-import com.nvidia.cuvs.CagraIndexParams.CagraGraphBuildAlgo;
 import com.nvidia.cuvs.CuVSMatrix;
 import java.io.IOException;
 import java.io.OutputStream;
@@ -75,12 +74,8 @@ public class CuVS2510GPUVectorsWriter extends KnnVectorsWriter {
   // we attempt to build a Cagra index
   static final int MIN_CAGRA_INDEX_SIZE = 2;
 
-  private final int cuvsWriterThreads;
-  private final int intGraphDegree;
-  private final int graphDegree;
-  private final CagraGraphBuildAlgo cagraGraphBuildAlgo;
+  private final GPUSearchParams params;
 
-  private final IndexType indexType;
   private final FlatVectorsWriter flatVectorsWriter;
   private final List<GPUFieldWriter> fields = new ArrayList<>();
   private IndexOutput meta = null, cuvsIndex = null;
@@ -149,20 +144,10 @@ public class CuVS2510GPUVectorsWriter extends KnnVectorsWriter {
    * @throws IOException I/O exceptions
    */
   public CuVS2510GPUVectorsWriter(
-      SegmentWriteState state,
-      int cuvsWriterThreads,
-      int intGraphDegree,
-      int graphDegree,
-      CagraGraphBuildAlgo cagraGraphBuildAlgo,
-      IndexType indexType,
-      FlatVectorsWriter flatVectorsWriter)
+      SegmentWriteState state, GPUSearchParams params, FlatVectorsWriter flatVectorsWriter)
       throws IOException {
     super();
-    this.indexType = indexType;
-    this.cuvsWriterThreads = cuvsWriterThreads;
-    this.intGraphDegree = intGraphDegree;
-    this.graphDegree = graphDegree;
-    this.cagraGraphBuildAlgo = cagraGraphBuildAlgo;
+    this.params = params;
     this.flatVectorsWriter = flatVectorsWriter;
     this.infoStream = state.infoStream;
 
@@ -245,10 +230,10 @@ public class CuVS2510GPUVectorsWriter extends KnnVectorsWriter {
     }
 
     return new CagraIndexParams.Builder()
-        .withNumWriterThreads(cuvsWriterThreads)
-        .withIntermediateGraphDegree(intGraphDegree)
-        .withGraphDegree(graphDegree)
-        .withCagraGraphBuildAlgo(cagraGraphBuildAlgo)
+        .withNumWriterThreads(params.getWriterThreads())
+        .withIntermediateGraphDegree(params.getIntermediateGraphDegree())
+        .withGraphDegree(params.getGraphdegree())
+        .withCagraGraphBuildAlgo(params.getCagraGraphBuildAlgo())
         .build();
   }
 
@@ -280,9 +265,9 @@ public class CuVS2510GPUVectorsWriter extends KnnVectorsWriter {
 
     // workaround for the minimum number of vectors for Cagra
     IndexType indexType =
-        this.indexType.cagra() && vectors.size() < MIN_CAGRA_INDEX_SIZE
+        params.getIndexType().cagra() && vectors.size() < MIN_CAGRA_INDEX_SIZE
             ? IndexType.BRUTE_FORCE
-            : this.indexType;
+            : params.getIndexType();
 
     try {
 
@@ -613,7 +598,7 @@ public class CuVS2510GPUVectorsWriter extends KnnVectorsWriter {
   public void mergeOneField(FieldInfo fieldInfo, MergeState mergeState) throws IOException {
     flatVectorsWriter.mergeOneField(fieldInfo, mergeState);
 
-    if (indexType.cagra() && !indexType.bruteForce()) {
+    if (params.getIndexType().cagra() && !params.getIndexType().bruteForce()) {
       // Since CAGRA merge does not support merging of indexes with purging of deletes,
       // we fallback to vector-based re-indexing. Issue:
       // https://github.com/rapidsai/cuvs/issues/1253

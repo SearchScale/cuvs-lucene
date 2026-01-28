@@ -5,6 +5,7 @@
 
 package com.nvidia.cuvs.lucene;
 
+import com.nvidia.cuvs.CagraIndexParams.CagraGraphBuildAlgo;
 import com.nvidia.cuvs.lucene.CuVS2510GPUVectorsWriter.IndexType;
 import jakarta.validation.ConstraintViolation;
 import jakarta.validation.ConstraintViolationException;
@@ -42,6 +43,8 @@ public class GPUSearchParams {
   @Max(value = MAX_GRAPH_DEG)
   private final int graphdegree;
 
+  @NotNull private final CagraGraphBuildAlgo cagraGraphBuildAlgo;
+
   @NotNull private final IndexType indexType;
 
   /**
@@ -50,14 +53,20 @@ public class GPUSearchParams {
    * @param writerThreads Number of cuVS writer threads to use.
    * @param intermediateGraphDegree The intermediate graph degree while building the CAGRA index.
    * @param graphdegree The graph degree to use while building the CAGRA index.
+   * @param cagraGraphBuildAlgo The CAGRA build algorithm to use.
    * @param indexType The type of index to build - CAGRA, BRUTEFORCE, or both.
    */
   private GPUSearchParams(
-      int writerThreads, int intermediateGraphDegree, int graphdegree, IndexType indexType) {
+      int writerThreads,
+      int intermediateGraphDegree,
+      int graphdegree,
+      CagraGraphBuildAlgo cagraGraphBuildAlgo,
+      IndexType indexType) {
     super();
     this.writerThreads = writerThreads;
     this.intermediateGraphDegree = intermediateGraphDegree;
     this.graphdegree = graphdegree;
+    this.cagraGraphBuildAlgo = cagraGraphBuildAlgo;
     this.indexType = indexType;
   }
 
@@ -89,12 +98,36 @@ public class GPUSearchParams {
   }
 
   /**
+   * Get the CAGRA build algorithm parameter value
+   *
+   * @return the CAGRA build algorithm parameter value
+   */
+  public CagraGraphBuildAlgo getCagraGraphBuildAlgo() {
+    return cagraGraphBuildAlgo;
+  }
+
+  /**
    * Get the index type parameter
    *
    * @return the index type parameter
    */
   public IndexType getIndexType() {
     return indexType;
+  }
+
+  @Override
+  public String toString() {
+    return "GPUSearchParams [writerThreads="
+        + writerThreads
+        + ", intermediateGraphDegree="
+        + intermediateGraphDegree
+        + ", graphdegree="
+        + graphdegree
+        + ", cagraGraphBuildAlgo="
+        + cagraGraphBuildAlgo
+        + ", indexType="
+        + indexType
+        + "]";
   }
 
   /**
@@ -105,6 +138,7 @@ public class GPUSearchParams {
     private int writerThreads = 1;
     private int intermediateGraphDegree = 128;
     private int graphdegree = 64;
+    private CagraGraphBuildAlgo cagraGraphBuildAlgo = CagraGraphBuildAlgo.NN_DESCENT;
     private IndexType indexType = IndexType.CAGRA;
 
     /**
@@ -147,6 +181,18 @@ public class GPUSearchParams {
     }
 
     /**
+     * Set the CAGRA build algorithm.
+     * Cannot be null, defaults to NN_DESCENT
+     *
+     * @param cagraGraphBuildAlgo the CAGRA build algorithm to use
+     * @return instance of {@link Builder}
+     */
+    public Builder withCagraGraphBuildAlgo(CagraGraphBuildAlgo cagraGraphBuildAlgo) {
+      this.cagraGraphBuildAlgo = cagraGraphBuildAlgo;
+      return this;
+    }
+
+    /**
      * Set the type of index to build - CAGRA, BRUTEFORCE, or both.
      * Cannot be null, defaults to CAGRA
      *
@@ -172,7 +218,8 @@ public class GPUSearchParams {
       Validator validator = factory.getValidator();
 
       GPUSearchParams gpuSearchParams =
-          new GPUSearchParams(writerThreads, intermediateGraphDegree, graphdegree, indexType);
+          new GPUSearchParams(
+              writerThreads, intermediateGraphDegree, graphdegree, cagraGraphBuildAlgo, indexType);
       Set<ConstraintViolation<GPUSearchParams>> violations = validator.validate(gpuSearchParams);
 
       if (!violations.isEmpty()) {

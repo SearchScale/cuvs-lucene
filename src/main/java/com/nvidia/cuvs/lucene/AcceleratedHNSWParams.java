@@ -139,6 +139,23 @@ public class AcceleratedHNSWParams {
     return beamWidth;
   }
 
+  @Override
+  public String toString() {
+    return "AcceleratedHNSWParams [writerThreads="
+        + writerThreads
+        + ", intermediateGraphDegree="
+        + intermediateGraphDegree
+        + ", graphdegree="
+        + graphdegree
+        + ", hnswLayers="
+        + hnswLayers
+        + ", maxConn="
+        + maxConn
+        + ", beamWidth="
+        + beamWidth
+        + "]";
+  }
+
   /**
    * Builder class for creating an instance of {@link GPUSearchParams}
    */
