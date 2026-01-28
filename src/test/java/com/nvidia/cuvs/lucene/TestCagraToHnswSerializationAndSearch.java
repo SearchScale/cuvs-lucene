@@ -1,15 +1,14 @@
 /*
- * SPDX-FileCopyrightText: Copyright (c) 2025, NVIDIA CORPORATION.
+ * SPDX-FileCopyrightText: Copyright (c) 2025-2026, NVIDIA CORPORATION.
  * SPDX-License-Identifier: Apache-2.0
  */
 package com.nvidia.cuvs.lucene;
 
 import static com.nvidia.cuvs.lucene.TestUtils.generateDataset;
+import static com.nvidia.cuvs.lucene.ThreadLocalCuVSResourcesProvider.isSupported;
 import static org.apache.lucene.index.VectorSimilarityFunction.EUCLIDEAN;
 
 import java.io.File;
-import java.io.IOException;
-import java.lang.reflect.InvocationTargetException;
 import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.util.Arrays;
@@ -52,23 +51,15 @@ public class TestCagraToHnswSerializationAndSearch extends LuceneTestCase {
 
   @Before
   public void beforeTest() throws Exception {
-    assumeTrue("cuVS not supported", Lucene99AcceleratedHNSWVectorsFormat.supported());
+    assumeTrue("cuVS not supported", isSupported());
     // Fixed seed so that we can validate against the same result.
     random = new Random(222);
     indexDirPath = Paths.get(UUID.randomUUID().toString());
   }
 
   @Test
-  public void testCagraToHnswSerializationAndSearch()
-      throws IOException,
-          ClassNotFoundException,
-          NoSuchMethodException,
-          SecurityException,
-          InstantiationException,
-          IllegalAccessException,
-          IllegalArgumentException,
-          InvocationTargetException {
-    Codec codec = new Lucene101AcceleratedHNSWCodec(32, 128, 64, 3, 16, 100);
+  public void testCagraToHnswSerializationAndSearch() throws Exception {
+    Codec codec = new Lucene101AcceleratedHNSWCodec(1, 128, 64, 3, 16, 100);
     IndexWriterConfig config = new IndexWriterConfig().setCodec(codec).setUseCompoundFile(false);
 
     final int COMMIT_FREQ = 2000;

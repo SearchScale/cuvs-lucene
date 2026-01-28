@@ -1,5 +1,5 @@
 /*
- * SPDX-FileCopyrightText: Copyright (c) 2025, NVIDIA CORPORATION.
+ * SPDX-FileCopyrightText: Copyright (c) 2025-2026, NVIDIA CORPORATION.
  * SPDX-License-Identifier: Apache-2.0
  */
 package com.nvidia.cuvs.lucene;
@@ -8,6 +8,8 @@ import static com.nvidia.cuvs.lucene.Lucene99AcceleratedHNSWVectorsFormat.HNSW_I
 import static com.nvidia.cuvs.lucene.Lucene99AcceleratedHNSWVectorsFormat.HNSW_INDEX_EXT;
 import static com.nvidia.cuvs.lucene.Lucene99AcceleratedHNSWVectorsFormat.HNSW_META_CODEC_EXT;
 import static com.nvidia.cuvs.lucene.Lucene99AcceleratedHNSWVectorsFormat.HNSW_META_CODEC_NAME;
+import static com.nvidia.cuvs.lucene.ThreadLocalCuVSResourcesProvider.closeCuVSResourcesInstance;
+import static com.nvidia.cuvs.lucene.ThreadLocalCuVSResourcesProvider.getCuVSResourcesInstance;
 import static org.apache.lucene.index.VectorEncoding.FLOAT32;
 import static org.apache.lucene.search.DocIdSetIterator.NO_MORE_DOCS;
 import static org.apache.lucene.util.RamUsageEstimator.shallowSizeOfInstance;
@@ -16,7 +18,6 @@ import com.nvidia.cuvs.CagraIndex;
 import com.nvidia.cuvs.CagraIndexParams;
 import com.nvidia.cuvs.CagraIndexParams.CagraGraphBuildAlgo;
 import com.nvidia.cuvs.CuVSMatrix;
-import com.nvidia.cuvs.CuVSResources;
 import com.nvidia.cuvs.RowView;
 import java.io.IOException;
 import java.nio.file.Files;
@@ -81,8 +82,8 @@ public class Lucene99AcceleratedHNSWVectorsWriter extends KnnVectorsWriter {
   private final int cuvsWriterThreads;
   private final int intGraphDegree;
   private final int graphDegree;
+  private final CagraGraphBuildAlgo cagraGraphBuildAlgo;
   private final int hnswLayers; // Number of layers to create in CAGRA->HNSW conversion
-  private final CuVSResources resources;
   private final FlatVectorsWriter flatVectorsWriter; // for writing the raw vectors
   private final List<GPUFieldWriter> fields = new ArrayList<>();
   private final InfoStream infoStream;
@@ -109,8 +110,8 @@ public class Lucene99AcceleratedHNSWVectorsWriter extends KnnVectorsWriter {
    * @param cuvsWriterThreads number of cuVS threads to use while building the intermediate CAGRA index
    * @param intGraphDegree the intermediate graph degree to use while building the CAGRA index
    * @param graphDegree the graph degree to use while building the CAGRA index
+   * @param cagraGraphBuildAlgo the CAGRA graph build algorithm to use
    * @param hnswLayers the number of hnsw layers to construct while building the HNSW graph
-   * @param resources instance of the {@link com.nvidia.cuvs.CuVSResources}
    * @param flatVectorsWriter instance of the {@link org.apache.lucene.codecs.hnsw.FlatVectorsWriter}
    * @throws IOException IOException
    */
@@ -119,16 +120,16 @@ public class Lucene99AcceleratedHNSWVectorsWriter extends KnnVectorsWriter {
       int cuvsWriterThreads,
       int intGraphDegree,
       int graphDegree,
+      CagraGraphBuildAlgo cagraGraphBuildAlgo,
       int hnswLayers,
-      CuVSResources resources,
       FlatVectorsWriter flatVectorsWriter)
       throws IOException {
     super();
     this.cuvsWriterThreads = cuvsWriterThreads;
     this.intGraphDegree = intGraphDegree;
     this.graphDegree = graphDegree;
+    this.cagraGraphBuildAlgo = cagraGraphBuildAlgo;
     this.hnswLayers = hnswLayers;
-    this.resources = resources;
     this.flatVectorsWriter = flatVectorsWriter;
     this.infoStream = state.infoStream;
 
@@ -210,7 +211,7 @@ public class Lucene99AcceleratedHNSWVectorsWriter extends KnnVectorsWriter {
         .withNumWriterThreads(cuvsWriterThreads)
         .withIntermediateGraphDegree(intGraphDegree)
         .withGraphDegree(graphDegree)
-        .withCagraGraphBuildAlgo(CagraGraphBuildAlgo.NN_DESCENT)
+        .withCagraGraphBuildAlgo(cagraGraphBuildAlgo)
         .build();
   }
 
@@ -241,7 +242,8 @@ public class Lucene99AcceleratedHNSWVectorsWriter extends KnnVectorsWriter {
 
     try {
       CuVSMatrix dataset =
-          Utils.createFloatMatrix(vectors, fieldInfo.getVectorDimension(), resources);
+          Utils.createFloatMatrix(
+              vectors, fieldInfo.getVectorDimension(), getCuVSResourcesInstance());
 
       if (dataset.size() < 2) {
         // Handle single vector case by creating a dummy HNSW graph
@@ -253,7 +255,10 @@ public class Lucene99AcceleratedHNSWVectorsWriter extends KnnVectorsWriter {
       long startTime = System.nanoTime();
       CagraIndexParams params = cagraIndexParams();
       CagraIndex cagraIndex =
-          CagraIndex.newBuilder(resources).withDataset(dataset).withIndexParams(params).build();
+          CagraIndex.newBuilder(getCuVSResourcesInstance())
+              .withDataset(dataset)
+              .withIndexParams(params)
+              .build();
 
       // Get the adjacency list from CAGRA index
       CuVSMatrix adjacencyListMatrix = cagraIndex.getGraph();
@@ -382,7 +387,10 @@ public class Lucene99AcceleratedHNSWVectorsWriter extends KnnVectorsWriter {
     // Build CAGRA index for the subset
     CagraIndexParams params = cagraIndexParams();
     CagraIndex subsetIndex =
-        CagraIndex.newBuilder(resources).withDataset(subsetDataset).withIndexParams(params).build();
+        CagraIndex.newBuilder(getCuVSResourcesInstance())
+            .withDataset(subsetDataset)
+            .withIndexParams(params)
+            .build();
 
     // Get adjacency list from subset CAGRA index
     CuVSMatrix cagraGraph = subsetIndex.getGraph();
@@ -737,7 +745,7 @@ public class Lucene99AcceleratedHNSWVectorsWriter extends KnnVectorsWriter {
     KnnVectorValues.DocIndexIterator iter = mergedVectorValues.iterator();
     for (int docV = iter.nextDoc(); docV != NO_MORE_DOCS; docV = iter.nextDoc()) {
       float[] vector = mergedVectorValues.vectorValue(iter.index());
-      vectors.add(vector);
+      vectors.add(vector.clone());
     }
     return vectors;
   }
@@ -792,7 +800,8 @@ public class Lucene99AcceleratedHNSWVectorsWriter extends KnnVectorsWriter {
       var cagraIndexOutputStream = new IndexOutputOutputStream(cuvsIndex);
 
       // Serialize the merged index
-      Path tmpFile = Files.createTempFile(resources.tempDirectory(), "mergedindex", "cag");
+      Path tmpFile =
+          Files.createTempFile(getCuVSResourcesInstance().tempDirectory(), "mergedindex", "cag");
       mergedIndex.serialize(cagraIndexOutputStream, tmpFile);
 
       // TODO: Path to writeFieldInternal missing. Fix this.
@@ -861,6 +870,7 @@ public class Lucene99AcceleratedHNSWVectorsWriter extends KnnVectorsWriter {
   @Override
   public void close() throws IOException {
     IOUtils.close(cuvsIndex, hnswMeta, hnswVectorIndex, flatVectorsWriter);
+    closeCuVSResourcesInstance();
   }
 
   /**

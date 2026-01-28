@@ -1,16 +1,16 @@
 /*
- * SPDX-FileCopyrightText: Copyright (c) 2025, NVIDIA CORPORATION.
+ * SPDX-FileCopyrightText: Copyright (c) 2025-2026, NVIDIA CORPORATION.
  * SPDX-License-Identifier: Apache-2.0
  */
 package com.nvidia.cuvs.lucene;
 
 import static com.nvidia.cuvs.lucene.TestUtils.generateDataset;
+import static com.nvidia.cuvs.lucene.ThreadLocalCuVSResourcesProvider.isSupported;
+import static com.nvidia.cuvs.lucene.ThreadLocalCuVSResourcesProvider.setCuVSResourcesInstance;
 import static com.nvidia.cuvs.lucene.Utils.cuVSResourcesOrNull;
 import static org.apache.lucene.index.VectorSimilarityFunction.EUCLIDEAN;
 
 import java.io.File;
-import java.io.IOException;
-import java.lang.reflect.InvocationTargetException;
 import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.util.Arrays;
@@ -54,24 +54,16 @@ public class TestCagraToHnswSerializationAndSearchWithFallbackWriter extends Luc
 
   @BeforeClass
   public static void beforeClass() throws Exception {
-    assumeTrue("cuVS not supported", Lucene99AcceleratedHNSWVectorsFormat.supported());
+    assumeTrue("cuVS not supported", isSupported());
     // Set resources to null to simulate that cuVS is not supported.
-    Lucene99AcceleratedHNSWVectorsFormat.setResources(null);
+    setCuVSResourcesInstance(null);
     // Fixed seed so that we can validate against the same result.
     random = new Random(222);
     indexDirPath = Paths.get(UUID.randomUUID().toString());
   }
 
   @Test
-  public void testCagraToHnswSerializationAndSearchWithFallbackWriter()
-      throws IOException,
-          ClassNotFoundException,
-          NoSuchMethodException,
-          SecurityException,
-          InstantiationException,
-          IllegalAccessException,
-          IllegalArgumentException,
-          InvocationTargetException {
+  public void testCagraToHnswSerializationAndSearchWithFallbackWriter() throws Exception {
     Codec codec = new Lucene101AcceleratedHNSWCodec(32, 128, 64, 3, 16, 100);
     IndexWriterConfig config = new IndexWriterConfig().setCodec(codec).setUseCompoundFile(false);
 
@@ -165,7 +157,7 @@ public class TestCagraToHnswSerializationAndSearchWithFallbackWriter extends Luc
   @AfterClass
   public static void afterClass() throws Exception {
     // Reset resources for other tests to work
-    Lucene99AcceleratedHNSWVectorsFormat.setResources(cuVSResourcesOrNull());
+    setCuVSResourcesInstance(cuVSResourcesOrNull());
     File indexDirPathFile = indexDirPath.toFile();
     if (indexDirPathFile.exists() && indexDirPathFile.isDirectory()) {
       FileUtils.deleteDirectory(indexDirPathFile);
