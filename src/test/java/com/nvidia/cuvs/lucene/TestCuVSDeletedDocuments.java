@@ -56,6 +56,74 @@ public class TestCuVSDeletedDocuments extends LuceneTestCase {
   }
 
   @Test
+  public void testVectorSearchWithDeletedDocumentsNoMerge() throws IOException {
+    try (Directory directory = newDirectory()) {
+      int datasetSize = 1000; // random.nextInt(200, 1000); // 200-1200 documents
+      int dimensions = 64; // random.nextInt(64, 256); // 64-320 dimensions
+      int topK = 10; // Math.min(random.nextInt(20) + 5, datasetSize / 2); // 5-25 results
+      float deletionProbability = 0.2f; // random.nextFloat() * 0.4f + 0.1f; // 10-50% deletion rate
+
+      float[][] dataset = generateDataset(random, datasetSize, dimensions);
+      Set<Integer> deletedDocs = new HashSet<>();
+
+      // Create index with all documents having vectors
+      try (RandomIndexWriter writer = createWriter(directory)) {
+        for (int i = 0; i < datasetSize; i++) {
+          Document doc = new Document();
+          doc.add(new StringField("id", String.valueOf(i), Field.Store.YES));
+          doc.add(
+              new KnnFloatVectorField("vector", dataset[i], VectorSimilarityFunction.EUCLIDEAN));
+          writer.addDocument(doc);
+        }
+
+        // Delete documents randomly based on probability
+        for (int i = 0; i < datasetSize; i++) {
+          if (random.nextFloat() < deletionProbability) {
+            writer.deleteDocuments(new Term("id", String.valueOf(i)));
+            deletedDocs.add(i);
+          }
+        }
+        writer.commit();
+      }
+
+      // Search and verify deleted documents are not returned
+      try (DirectoryReader reader = DirectoryReader.open(directory)) {
+        log.log(Level.FINE, "SSSSSSSSSSSSSSSSSSSSSSSS " + reader.leaves().size());
+
+        IndexSearcher searcher = newSearcher(reader);
+        // Use a random vector for query
+        float[] queryVector = generateRandomVector(dimensions, random);
+
+        GPUKnnFloatVectorQuery query =
+            new GPUKnnFloatVectorQuery("vector", queryVector, topK, null, topK, 1);
+        ScoreDoc[] hits = searcher.search(query, topK).scoreDocs;
+
+        // Verify we got results
+        assertTrue("Should have search results", hits.length > 0);
+
+        // Verify no deleted documents in results
+        for (ScoreDoc hit : hits) {
+          String docId = reader.storedFields().document(hit.doc).get("id");
+          int id = Integer.parseInt(docId);
+          assertFalse(
+              "Deleted document " + id + " should not appear in results", deletedDocs.contains(id));
+          log.log(Level.FINE, "Found non-deleted document: " + id + ", Score: " + hit.score);
+        }
+
+        // Verify deleted documents are truly deleted
+        for (int deletedId : deletedDocs) {
+          TopDocs result =
+              searcher.search(new TermQuery(new Term("id", String.valueOf(deletedId))), 1);
+          assertEquals(
+              "Deleted document " + deletedId + " should not be found",
+              0,
+              result.totalHits.value());
+        }
+      }
+    }
+  }
+
+  @Test
   public void testVectorSearchWithDeletedDocuments() throws IOException {
 
     try (Directory directory = newDirectory()) {

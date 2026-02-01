@@ -29,10 +29,8 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Objects;
 import java.util.logging.Logger;
-import java.util.stream.IntStream;
 import org.apache.lucene.codecs.CodecUtil;
 import org.apache.lucene.codecs.KnnFieldVectorsWriter;
-import org.apache.lucene.codecs.KnnVectorsReader;
 import org.apache.lucene.codecs.KnnVectorsWriter;
 import org.apache.lucene.codecs.hnsw.FlatFieldVectorsWriter;
 import org.apache.lucene.codecs.hnsw.FlatVectorsWriter;
@@ -379,6 +377,7 @@ public class CuVS2510GPUVectorsWriter extends KnnVectorsWriter {
    */
   @Override
   public void flush(int maxDoc, DocMap sortMap) throws IOException {
+    System.out.println("----------------- FLUSH CALLED ....");
     flatVectorsWriter.flush(maxDoc, sortMap);
     for (var field : fields) {
       if (sortMap == null) {
@@ -488,29 +487,16 @@ public class CuVS2510GPUVectorsWriter extends KnnVectorsWriter {
    */
   private void mergeCagraIndexes(FieldInfo fieldInfo, MergeState mergeState) throws IOException {
     try {
-
       List<CagraIndex> cagraIndexes = new ArrayList<>();
-      // We need this count so that the merged segment's meta information has the vector count.
       int totalVectorCount = 0;
 
       for (int i = 0; i < mergeState.knnVectorsReaders.length; i++) {
-        KnnVectorsReader knnReader = mergeState.knnVectorsReaders[i];
-        // Access the CAGRA index for this field from the reader
-
-        if (knnReader != null) {
-          if (knnReader instanceof CuVS2510GPUVectorsReader cvr) {
-            if (cvr != null) {
-              totalVectorCount += cvr.getFieldEntries().get(fieldInfo.number).count();
-              CagraIndex cagraIndex = getCagraIndexFromReader(cvr, fieldInfo.name);
-              if (cagraIndex != null) {
-                cagraIndexes.add(cagraIndex);
-              }
-            }
-          } else {
-            // This should never happen
-            throw new RuntimeException(
-                "Reader is not of CuVSVectorsReader type. Instead it is: " + knnReader.getClass());
-          }
+        CuVS2510GPUVectorsReader cvr = (CuVS2510GPUVectorsReader) mergeState.knnVectorsReaders[i];
+        // var cvr = (CuVS2510GPUVectorsReader) knnReader.getFieldReader(fieldInfo.name);
+        totalVectorCount += cvr.getFieldEntries().get(fieldInfo.number).count();
+        CagraIndex cagraIndex = getCagraIndexFromReader(cvr, fieldInfo.name);
+        if (cagraIndex != null) {
+          cagraIndexes.add(cagraIndex);
         }
       }
       assert cagraIndexes.size() > 1;
@@ -520,40 +506,6 @@ public class CuVS2510GPUVectorsWriter extends KnnVectorsWriter {
       writeMergedCagraIndex(fieldInfo, mergedIndex, totalVectorCount);
       info("Successfully merged " + cagraIndexes.size() + " CAGRA indexes using native merge API");
 
-    } catch (Throwable t) {
-      Utils.handleThrowable(t);
-    }
-  }
-
-  /**
-   * Creates List<Float[]> from merged vectors.
-   */
-  private List<float[]> createListFromMergedVectors(FloatVectorValues mergedVectorValues)
-      throws IOException {
-    List<float[]> res = new ArrayList<float[]>();
-    KnnVectorValues.DocIndexIterator iter = mergedVectorValues.iterator();
-    for (int docV = iter.nextDoc(); docV != NO_MORE_DOCS; docV = iter.nextDoc()) {
-      int ordinal = iter.index();
-      float[] vector = mergedVectorValues.vectorValue(ordinal);
-      res.add(vector.clone());
-    }
-    return res;
-  }
-
-  /**
-   * Fallback method that rebuilds indexes from merged vectors.
-   * Used when native CAGRA merge() is not possible. Also used
-   * when non-CAGRA index types are used (for e.g. Brute Force index).
-   */
-  private void vectorBasedMerge(FieldInfo fieldInfo, MergeState mergeState) throws IOException {
-    if (fieldInfo.getVectorEncoding() != FLOAT32) {
-      throw new AssertionError("Only Float32 supported");
-    }
-    try {
-      List<float[]> dataset =
-          createListFromMergedVectors(
-              KnnVectorsWriter.MergedVectorValues.mergeFloatVectorValues(fieldInfo, mergeState));
-      writeFieldInternal(fieldInfo, dataset);
     } catch (Throwable t) {
       Utils.handleThrowable(t);
     }
@@ -611,21 +563,12 @@ public class CuVS2510GPUVectorsWriter extends KnnVectorsWriter {
    */
   @Override
   public void mergeOneField(FieldInfo fieldInfo, MergeState mergeState) throws IOException {
+    System.out.println("----------------- MERGE CALLED .... **************");
     flatVectorsWriter.mergeOneField(fieldInfo, mergeState);
 
     if (indexType.cagra() && !indexType.bruteForce()) {
-      // Since CAGRA merge does not support merging of indexes with purging of deletes,
-      // we fallback to vector-based re-indexing. Issue:
-      // https://github.com/rapidsai/cuvs/issues/1253
-      boolean hasDeletions =
-          IntStream.range(0, mergeState.liveDocs.length)
-              .anyMatch(
-                  i ->
-                      mergeState.liveDocs[i] == null
-                          || IntStream.range(0, mergeState.maxDocs[i])
-                              .anyMatch(j -> !mergeState.liveDocs[i].get(j)));
 
-      if (mergeState.knnVectorsReaders.length > 1 && !hasDeletions) {
+      if (mergeState.knnVectorsReaders.length > 1) {
         mergeCagraIndexes(fieldInfo, mergeState);
       } else {
         // CAGRA's merge API does not handle the trivial case of merging 1 index.
@@ -633,10 +576,39 @@ public class CuVS2510GPUVectorsWriter extends KnnVectorsWriter {
       }
 
     } else {
-      // If there is a Brute Force index then re-index using the vectors even if there is a CAGRA
-      // index.
       vectorBasedMerge(fieldInfo, mergeState);
     }
+  }
+
+  /**
+   * Fallback method that rebuilds indexes from merged vectors.
+   * Used when native CAGRA merge() is not possible. Also used
+   * when non-CAGRA index types are used (for e.g. Brute Force index).
+   */
+  private void vectorBasedMerge(FieldInfo fieldInfo, MergeState mergeState) throws IOException {
+    try {
+      List<float[]> dataset =
+          createListFromMergedVectors(
+              KnnVectorsWriter.MergedVectorValues.mergeFloatVectorValues(fieldInfo, mergeState));
+      writeFieldInternal(fieldInfo, dataset);
+    } catch (Throwable t) {
+      Utils.handleThrowable(t);
+    }
+  }
+
+  /**
+   * Creates List<Float[]> from merged vectors.
+   */
+  private List<float[]> createListFromMergedVectors(FloatVectorValues mergedVectorValues)
+      throws IOException {
+    List<float[]> res = new ArrayList<float[]>();
+    KnnVectorValues.DocIndexIterator iter = mergedVectorValues.iterator();
+    for (int docV = iter.nextDoc(); docV != NO_MORE_DOCS; docV = iter.nextDoc()) {
+      int ordinal = iter.index();
+      float[] vector = mergedVectorValues.vectorValue(ordinal);
+      res.add(vector.clone());
+    }
+    return res;
   }
 
   /**

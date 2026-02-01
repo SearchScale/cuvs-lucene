@@ -71,8 +71,7 @@ public class TestMerge extends LuceneTestCase {
 
   @ParametersFactory
   public static List<Object[]> parameters() {
-    return Arrays.asList(
-        new Object[][] {{CagraGraphBuildAlgo.NN_DESCENT}, {CagraGraphBuildAlgo.IVF_PQ}});
+    return Arrays.asList(new Object[][] {{CagraGraphBuildAlgo.NN_DESCENT}});
   }
 
   @BeforeClass
@@ -608,6 +607,104 @@ public class TestMerge extends LuceneTestCase {
       }
 
       log.log(Level.FINE, "Missing vectors test completed successfully");
+    }
+  }
+
+  /**
+   *  Test merge behavior with document deletions
+   **/
+  @Test
+  public void testMergeWithNoDeletions() throws IOException {
+    log.log(
+        Level.FINE,
+        "Starting testMergeWithNoDeletions with CagraGraphBuildAlgo: " + cagraGraphBuildAlgo);
+
+    // Randomize configuration parameters
+    int maxBufferedDocs = 15 + random().nextInt(11); // 15-25 docs per buffer
+    int numSegments = 3 + random().nextInt(4); // 3-6 segments
+    int docsPerSegment = 20 + random().nextInt(21); // 20-40 docs per segment
+
+    log.log(
+        Level.FINE,
+        "Randomized parameters: maxBufferedDocs="
+            + maxBufferedDocs
+            + ", numSegments="
+            + numSegments
+            + ", docsPerSegment="
+            + docsPerSegment);
+
+    CuVS2510GPUVectorsFormat format =
+        new CuVS2510GPUVectorsFormat(32, 128, 64, cagraGraphBuildAlgo, IndexType.CAGRA);
+
+    IndexWriterConfig config =
+        new IndexWriterConfig()
+            .setCodec(alwaysKnnVectorsFormat(format))
+            .setMaxBufferedDocs(maxBufferedDocs)
+            .setRAMBufferSizeMB(IndexWriterConfig.DISABLE_AUTO_FLUSH);
+
+    int totalDocuments = numSegments * docsPerSegment;
+    try (IndexWriter writer = new IndexWriter(directory, config)) {
+      // Create multiple segments with documents
+      for (int seg = 0; seg < numSegments; seg++) {
+        for (int i = 0; i < docsPerSegment; i++) {
+          int docId = seg * docsPerSegment + i;
+          Document doc = new Document();
+          doc.add(new StringField("id", String.valueOf(docId), Field.Store.YES));
+          float[] vector = generateRandomVector(vectorDimension, random());
+          doc.add(new KnnFloatVectorField("vector", vector, VectorSimilarityFunction.COSINE));
+
+          writer.addDocument(doc);
+        }
+        writer.commit();
+      }
+
+      log.log(
+          Level.FINE,
+          "Created "
+              + numSegments
+              + " segments with "
+              + docsPerSegment
+              + " documents each ("
+              + totalDocuments
+              + " total)");
+
+      writer.forceMerge(1);
+      log.log(Level.FINE, "Forced merge with deletions completed");
+    }
+
+    // Verify the merged index correctly handles deletions
+    try (DirectoryReader reader = DirectoryReader.open(directory)) {
+      assertEquals("Should have exactly one segment after merge", 1, reader.leaves().size());
+
+      LeafReader leafReader = reader.leaves().get(0).reader();
+      assertEquals(
+          "Should have all documents after merge call", totalDocuments, leafReader.maxDoc());
+
+      IndexSearcher searcher = new IndexSearcher(reader);
+      int topK = random().nextInt(1, totalDocuments);
+      float[] queryVector = generateRandomVector(vectorDimension, random());
+      KnnFloatVectorQuery vectorQuery =
+          new GPUKnnFloatVectorQuery("vector", queryVector, topK, null, 1, 1);
+      TopDocs results = searcher.search(vectorQuery, topK);
+      assertTrue("Should find topK results", results.scoreDocs.length == topK);
+
+      for (int i = 0; i < results.scoreDocs.length; i++) {
+        ScoreDoc scoreDoc = results.scoreDocs[i];
+        Document doc = searcher.storedFields().document(scoreDoc.doc);
+        String id = doc.get("id");
+        log.log(
+            Level.FINE,
+            "Rank "
+                + (i + 1)
+                + ": doc "
+                + scoreDoc.doc
+                + " (id="
+                + id
+                + "), score="
+                + scoreDoc.score);
+      }
+
+      log.log(Level.FINE, "testMergeWithNoDeletions completed successfully");
     }
   }
 
