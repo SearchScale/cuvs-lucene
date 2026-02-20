@@ -73,6 +73,11 @@
         <scope>test</scope>
     </dependency>
     <dependency>
+        <groupId>org.apache.commons</groupId>
+        <artifactId>commons-lang3</artifactId>
+        <version>3.13.0</version>
+    </dependency>
+    <dependency>
       <groupId>com.nvidia.cuvs</groupId>
       <artifactId>cuvs-java</artifactId>
       <!--CUVS_LUCENE#VERSION_UPDATE_MARKER_START--><version>26.04.0</version><!--CUVS_LUCENE#VERSION_UPDATE_MARKER_END-->

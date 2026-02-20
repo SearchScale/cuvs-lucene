@@ -34,7 +34,25 @@ if hasArg --build-cuvs-java; then
 fi
 
 MAVEN_VERIFY_ARGS=()
-if ! hasArg --run-java-tests; then
+if hasArg --run-java-tests; then
+  # Run regular functional tests
+  MAVEN_VERIFY_ARGS=("-Dtest=Test*")
+elif hasArg --run-perf-tests; then
+  # Run a subset of tests that use Wiki 1Mx768 dataset to gauge index build and search times
+  MAVEN_VERIFY_ARGS=("-Dtest=Perf*")
+  # download dataset if not present
+  FOLDER="test-dataset"
+  FILE="$FOLDER/wiki_all_1M.tar"
+  if [ ! -f "$FILE" ]; then
+      mkdir -p "$FOLDER"
+      pushd "$FOLDER"
+      echo "dataset file does not exist, downloading: $FILE"
+      wget https://data.rapids.ai/raft/datasets/wiki_all_1M/wiki_all_1M.tar
+      # Unpack
+      tar -xf wiki_all_1M.tar
+      popd
+  fi
+else
   MAVEN_VERIFY_ARGS=("-DskipTests")
 fi
 
