@@ -22,7 +22,7 @@ public class DatasetUtils {
 
   public static void readDataFile(String filePath, int numRows, List<int[]> its, List<float[]> fts)
       throws Exception {
-    log.log(Level.INFO, "Reading " + numRows + " from file: " + filePath);
+    log.log(Level.INFO, "Reading " + numRows + " items from file: " + filePath);
     try (InputStream is = new FileInputStream(filePath)) {
       byte[] numVecBytes = is.readNBytes(4);
       ByteBuffer numVecBuffer = ByteBuffer.wrap(numVecBytes).order(ByteOrder.LITTLE_ENDIAN);
@@ -62,7 +62,7 @@ public class DatasetUtils {
           its.add(irow);
         }
         count++;
-        if (count % 100000 == 0) {
+        if (count % (int) (numRows / 4) == 0) {
           log.log(Level.INFO, "Read " + count + " items");
         }
       }

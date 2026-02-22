@@ -148,7 +148,7 @@ public class PerfTests extends LuceneTestCase {
 
   private class Gauges {
 
-    private static final int INTERVAL_MS = 500;
+    private static final int TIME_INTERVAL_MS = 500;
     private static final long BYTES_IN_MEGABYTE = 1024L * 1024L;
     private ExecutorService executor;
     private boolean running;
@@ -156,17 +156,17 @@ public class PerfTests extends LuceneTestCase {
 
     private Callable<Map<String, Object>> task =
         () -> {
+          MemoryMXBean memoryBean = ManagementFactory.getMemoryMXBean();
+          OperatingSystemMXBean osBean =
+              ManagementFactory.getPlatformMXBean(OperatingSystemMXBean.class);
+
           while (running) {
-            OperatingSystemMXBean osBean =
-                ManagementFactory.getPlatformMXBean(OperatingSystemMXBean.class);
             String[] gpum =
                 runProc(
                         "nvidia-smi",
                         "--query-gpu=utilization.gpu,memory.total,memory.used",
                         "--format=csv,noheader,nounits")
                     .split(",");
-
-            MemoryMXBean memoryBean = ManagementFactory.getMemoryMXBean();
             MemoryUsage heapUsage = memoryBean.getHeapMemoryUsage();
             MemoryUsage nonHeapUsage = memoryBean.getNonHeapMemoryUsage();
             Double cpuSystemLoad = osBean.getCpuLoad() * 100;
@@ -182,7 +182,7 @@ public class PerfTests extends LuceneTestCase {
             putMetric(metrics, "GPU_MEMORY_UTILIZATION", gpuMemUtilization);
             putMetric(metrics, "HEAP_MEMORY", heapUsage.getUsed() / BYTES_IN_MEGABYTE);
             putMetric(metrics, "NON_HEAP_MEMORY", nonHeapUsage.getUsed() / BYTES_IN_MEGABYTE);
-            Thread.sleep(INTERVAL_MS);
+            Thread.sleep(TIME_INTERVAL_MS);
           }
           return null;
         };
