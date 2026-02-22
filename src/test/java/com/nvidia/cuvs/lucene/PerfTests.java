@@ -5,16 +5,28 @@
 
 package com.nvidia.cuvs.lucene;
 
+import static com.nvidia.cuvs.lucene.DatasetUtils.readDataFile;
 import static org.apache.lucene.index.VectorSimilarityFunction.EUCLIDEAN;
 
+import com.sun.management.OperatingSystemMXBean;
+import java.io.BufferedReader;
 import java.io.File;
 import java.io.IOException;
+import java.io.InputStreamReader;
 import java.io.UncheckedIOException;
+import java.lang.management.ManagementFactory;
+import java.lang.management.MemoryMXBean;
+import java.lang.management.MemoryUsage;
+import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.util.ArrayList;
+import java.util.HashMap;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.UUID;
+import java.util.concurrent.Callable;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.TimeUnit;
@@ -46,19 +58,28 @@ public class PerfTests extends LuceneTestCase {
 
   private static final Logger log = Logger.getLogger(PerfTests.class.getName());
   private static final int NUM_VECTORS = 1_000_000;
+  private static final int NUM_QUERIES = 10_000;
   private static final String ID_FIELD = "id";
   private static final String VECTOR_FIELD = "vector_field";
   private static IndexWriterConfig config;
   private static Codec codec;
   private static List<float[]> dataset;
+  private static List<float[]> queries;
+  private static List<int[]> neighbors;
   private static Path indexDirPath;
-  private static int numThreads = 2;
+  private static int numThreads = 1;
+  private static Gauges gauges;
 
   @BeforeClass
   public static void beforeClass() throws Exception {
     log.log(Level.INFO, "Starting perf tests ...");
+    System.out.println(Gauges.getHardwareInformation());
     dataset = new ArrayList<float[]>();
-    DatasetUtils.readDataFile("test-dataset/base.1M.fbin", NUM_VECTORS, null, dataset);
+    queries = new ArrayList<float[]>();
+    neighbors = new ArrayList<int[]>();
+    readDataFile("test-dataset/base.1M.fbin", NUM_VECTORS, null, dataset);
+    readDataFile("test-dataset/queries.fbin", NUM_QUERIES, null, queries);
+    readDataFile("test-dataset/groundtruth.1M.neighbors.ibin", NUM_QUERIES, neighbors, null);
     codec = new Lucene101AcceleratedHNSWCodec();
     config = new IndexWriterConfig().setCodec(codec);
     config.setMaxBufferedDocs(NUM_VECTORS);
@@ -66,12 +87,16 @@ public class PerfTests extends LuceneTestCase {
   }
 
   @Before
-  public void beforeEach() {
+  public void beforeEach() throws IOException {
     indexDirPath = Paths.get(UUID.randomUUID().toString());
+    gauges = new Gauges();
+    gauges.start();
   }
 
   @After
   public void afterEach() throws IOException {
+    gauges.stop();
+    System.out.println(gauges.getMetrics());
     File indexDirPathFile = indexDirPath.toFile();
     if (indexDirPathFile.exists() && indexDirPathFile.isDirectory()) {
       FileUtils.deleteDirectory(indexDirPathFile);
@@ -113,11 +138,115 @@ public class PerfTests extends LuceneTestCase {
         DirectoryReader reader = DirectoryReader.open(indexDirectory)) {
       log.log(Level.INFO, "Number of segments: " + reader.leaves().size());
     }
-    log.log(Level.INFO, "Index build time (ms) is: " + sw.getTime(TimeUnit.MILLISECONDS));
+    log.log(Level.INFO, "Index build time is: " + sw.getTime(TimeUnit.MILLISECONDS) + " ms");
   }
 
   @AfterClass
   public static void afterClass() {
     // Cleanup
+  }
+
+  private class Gauges {
+
+    private static final int INTERVAL_MS = 500;
+    private static final long BYTES_IN_MEGABYTE = 1024L * 1024L;
+    private ExecutorService executor;
+    private boolean running;
+    private Map<String, Object> metrics;
+
+    private Callable<Map<String, Object>> task =
+        () -> {
+          while (running) {
+            OperatingSystemMXBean osBean =
+                ManagementFactory.getPlatformMXBean(OperatingSystemMXBean.class);
+            String[] gpum =
+                runProc(
+                        "nvidia-smi",
+                        "--query-gpu=utilization.gpu,memory.total,memory.used",
+                        "--format=csv,noheader,nounits")
+                    .split(",");
+
+            MemoryMXBean memoryBean = ManagementFactory.getMemoryMXBean();
+            MemoryUsage heapUsage = memoryBean.getHeapMemoryUsage();
+            MemoryUsage nonHeapUsage = memoryBean.getNonHeapMemoryUsage();
+            Double cpuSystemLoad = osBean.getCpuLoad() * 100;
+            Double cpuProcessLoad = osBean.getProcessCpuLoad() * 100;
+            Double gpuLoad = Double.valueOf(gpum[0].trim());
+            Double gpuAvailableMemory = Double.valueOf(gpum[1].trim());
+            Double gpuMemory = Double.valueOf(gpum[2].trim());
+            Double gpuMemUtilization = (gpuMemory / gpuAvailableMemory) * 100;
+            putMetric(metrics, "CPU_SYSTEM_LOAD", cpuSystemLoad);
+            putMetric(metrics, "CPU_PROCESS_LOAD", cpuProcessLoad);
+            putMetric(metrics, "GPU_LOAD", gpuLoad);
+            putMetric(metrics, "GPU_MEMORY", gpuMemory);
+            putMetric(metrics, "GPU_MEMORY_UTILIZATION", gpuMemUtilization);
+            putMetric(metrics, "HEAP_MEMORY", heapUsage.getUsed() / BYTES_IN_MEGABYTE);
+            putMetric(metrics, "NON_HEAP_MEMORY", nonHeapUsage.getUsed() / BYTES_IN_MEGABYTE);
+            Thread.sleep(INTERVAL_MS);
+          }
+          return null;
+        };
+
+    private void putMetric(Map<String, Object> m, String key, double value) {
+      if (!m.containsKey("INIT_" + key)) {
+        m.put("INIT_" + key, value);
+        m.put("MAX_" + key, value);
+      } else {
+        double cscl = (double) m.get("MAX_" + key);
+        m.put("MAX_" + key, Math.max(cscl, value));
+      }
+    }
+
+    public static Map<String, String> getHardwareInformation() throws IOException {
+      List<String> cpuInfo = Files.readAllLines(Paths.get("/proc/cpuinfo"));
+      Map<String, String> hwm = new HashMap<String, String>();
+      if (!cpuInfo.isEmpty()) {
+        for (String info : cpuInfo) {
+          if (info.contains("model name") || info.contains("siblings")) {
+            String[] inf = info.split(":");
+            hwm.put("CPU " + inf[0].trim(), inf[1].trim());
+          }
+          if (hwm.size() == 2) { // Just get the CPU model and thread count
+            break;
+          }
+        }
+      }
+      String op =
+          runProc(
+              "nvidia-smi", "--query-gpu=gpu_name,memory.total", "--format=csv,noheader,nounits");
+      String[] sp = op.split(",");
+      hwm.put("GPU model name", sp[0].trim());
+      hwm.put("GPU memory [MB]", sp[1].trim());
+      return hwm;
+    }
+
+    private static String runProc(String... command) throws IOException {
+      ProcessBuilder processBuilder = new ProcessBuilder(command);
+      Process process = processBuilder.start();
+      BufferedReader reader = new BufferedReader(new InputStreamReader(process.getInputStream()));
+      String line;
+      StringBuilder output = new StringBuilder();
+      while ((line = reader.readLine()) != null) {
+        output.append(line).append("\n");
+      }
+      reader.close();
+      return output.toString();
+    }
+
+    public void start() {
+      executor = Executors.newSingleThreadExecutor();
+      metrics = new LinkedHashMap<String, Object>();
+      running = true;
+      executor.submit(task);
+    }
+
+    public void stop() {
+      running = false;
+      executor.shutdown();
+    }
+
+    public Map<String, Object> getMetrics() {
+      return metrics;
+    }
   }
 }
