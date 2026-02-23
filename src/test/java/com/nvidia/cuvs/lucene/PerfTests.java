@@ -8,6 +8,8 @@ package com.nvidia.cuvs.lucene;
 import static com.nvidia.cuvs.lucene.DatasetUtils.readDataFile;
 import static org.apache.lucene.index.VectorSimilarityFunction.EUCLIDEAN;
 
+import com.carrotsearch.randomizedtesting.annotations.Name;
+import com.carrotsearch.randomizedtesting.annotations.ParametersFactory;
 import com.sun.management.OperatingSystemMXBean;
 import java.io.BufferedReader;
 import java.io.File;
@@ -21,7 +23,7 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.util.ArrayList;
-import java.util.HashMap;
+import java.util.Arrays;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -52,6 +54,7 @@ import org.junit.AfterClass;
 import org.junit.Before;
 import org.junit.BeforeClass;
 import org.junit.Test;
+import tools.jackson.databind.ObjectMapper;
 
 @SuppressSysoutChecks(bugUrl = "")
 public class PerfTests extends LuceneTestCase {
@@ -69,51 +72,92 @@ public class PerfTests extends LuceneTestCase {
   private static Path indexDirPath;
   private static int numThreads = 1;
   private static Gauges gauges;
+  private static Map<String, Object> reports;
+
+  static {
+    reports = new LinkedHashMap<String, Object>();
+  }
+
+  public PerfTests(@Name("codec") Codec codec) {
+    PerfTests.codec = codec;
+  }
+
+  @ParametersFactory
+  public static List<Object[]> parameters() throws Exception {
+    return Arrays.asList(
+        new Object[][] {
+          {new Lucene101AcceleratedHNSWCodec()},
+          {new LuceneAcceleratedHNSWBinaryQuantizedCodec()},
+          {new LuceneAcceleratedHNSWScalarQuantizedCodec()},
+          {new CuVS2510GPUSearchCodec()}
+        });
+  }
 
   @BeforeClass
   public static void beforeClass() throws Exception {
     log.log(Level.INFO, "Starting perf tests ...");
-    System.out.println(Gauges.getHardwareInformation());
+    reports.put("Hardware", Gauges.getHardwareInformation());
     dataset = new ArrayList<float[]>();
     queries = new ArrayList<float[]>();
     neighbors = new ArrayList<int[]>();
     readDataFile("test-dataset/base.1M.fbin", NUM_VECTORS, null, dataset);
     readDataFile("test-dataset/queries.fbin", NUM_QUERIES, null, queries);
     readDataFile("test-dataset/groundtruth.1M.neighbors.ibin", NUM_QUERIES, neighbors, null);
-    codec = new Lucene101AcceleratedHNSWCodec();
+    Map<String, Object> datasetMap = new LinkedHashMap<String, Object>();
+    datasetMap.put("Dataset", "Wikipedia 10Mx768");
+    datasetMap.put("vectors", dataset.size());
+    datasetMap.put("dimensions", dataset.isEmpty() ? 0 : dataset.get(0).length);
+    datasetMap.put("queries", queries.size());
+    reports.put("Dataset", datasetMap);
+  }
+
+  @SuppressWarnings("unchecked")
+  @Before
+  public void beforeEach() throws IOException {
+    String testName = getTestName().split("\\{")[0].trim();
+    log.log(Level.INFO, "Running test: " + testName);
+    if (!reports.containsKey(testName)) {
+      Map<String, Object> testMap = new LinkedHashMap<String, Object>();
+      reports.put(testName, testMap);
+    }
+    Map<String, Object> testMap = (Map<String, Object>) reports.get(testName);
+    Map<String, Object> testCodecMap = new LinkedHashMap<String, Object>();
+    testMap.put(codec.getName(), testCodecMap);
+
+    indexDirPath = Paths.get(UUID.randomUUID().toString());
     config = new IndexWriterConfig().setCodec(codec);
     config.setMaxBufferedDocs(NUM_VECTORS);
     config.setRAMBufferSizeMB(32767);
-  }
-
-  @Before
-  public void beforeEach() throws IOException {
-    indexDirPath = Paths.get(UUID.randomUUID().toString());
     gauges = new Gauges();
     gauges.start();
   }
 
+  @SuppressWarnings("unchecked")
   @After
   public void afterEach() throws IOException {
     gauges.stop();
-    System.out.println(gauges.getMetrics());
+    String testName = getTestName().split("\\{")[0].trim();
+    Map<String, Object> testMap = (Map<String, Object>) reports.get(testName);
+    Map<String, Object> testCodecMap = (Map<String, Object>) testMap.get(codec.getName());
+    testCodecMap.put("Metrics", gauges.getMetrics());
     File indexDirPathFile = indexDirPath.toFile();
     if (indexDirPathFile.exists() && indexDirPathFile.isDirectory()) {
       FileUtils.deleteDirectory(indexDirPathFile);
     }
   }
 
+  @SuppressWarnings("unchecked")
   @Test
   public void gaugeIndexBuildTime() throws IOException, InterruptedException {
     StopWatch sw = StopWatch.createStarted();
+    AtomicInteger id = new AtomicInteger(1);
     try (Directory indexDirectory = FSDirectory.open(indexDirPath);
         IndexWriter writer = new IndexWriter(indexDirectory, config);
         ExecutorService pool = Executors.newFixedThreadPool(numThreads)) {
-      AtomicInteger id = new AtomicInteger(1);
       for (int pi = 0; pi < numThreads; pi++) {
         pool.submit(
             () -> {
-              while (id.getAndIncrement() <= NUM_VECTORS) {
+              while (id.getAndIncrement() <= dataset.size()) {
                 try {
                   Document document = new Document();
                   document.add(
@@ -134,16 +178,29 @@ public class PerfTests extends LuceneTestCase {
       writer.commit();
     }
     sw.stop();
+
+    String testName = getTestName().split("\\{")[0].trim();
+    Map<String, Object> testMap = (Map<String, Object>) reports.get(testName);
+    Map<String, Object> testCodecMap = (Map<String, Object>) testMap.get(codec.getName());
+    Map<String, Object> testInfoMap = new LinkedHashMap<String, Object>();
+    testInfoMap.put("Num Documents", id.get());
+    testInfoMap.put("Index Build Time [ms]", sw.getTime());
+    testCodecMap.put("Details", testInfoMap);
+
     try (Directory indexDirectory = FSDirectory.open(indexDirPath);
         DirectoryReader reader = DirectoryReader.open(indexDirectory)) {
       log.log(Level.INFO, "Number of segments: " + reader.leaves().size());
+      testInfoMap.put("Num Segments", reader.leaves().size());
     }
     log.log(Level.INFO, "Index build time is: " + sw.getTime(TimeUnit.MILLISECONDS) + " ms");
   }
 
   @AfterClass
   public static void afterClass() {
-    // Cleanup
+    // Pretty-print JSON report
+    ObjectMapper mapper = new ObjectMapper();
+    String ppJ = mapper.writerWithDefaultPrettyPrinter().writeValueAsString(reports);
+    log.log(Level.INFO, ppJ);
   }
 
   private class Gauges {
@@ -153,7 +210,6 @@ public class PerfTests extends LuceneTestCase {
     private ExecutorService executor;
     private boolean running;
     private Map<String, Object> metrics;
-
     private Callable<Map<String, Object>> task =
         () -> {
           MemoryMXBean memoryBean = ManagementFactory.getMemoryMXBean();
@@ -199,7 +255,7 @@ public class PerfTests extends LuceneTestCase {
 
     public static Map<String, String> getHardwareInformation() throws IOException {
       List<String> cpuInfo = Files.readAllLines(Paths.get("/proc/cpuinfo"));
-      Map<String, String> hwm = new HashMap<String, String>();
+      Map<String, String> hwm = new LinkedHashMap<String, String>();
       if (!cpuInfo.isEmpty()) {
         for (String info : cpuInfo) {
           if (info.contains("model name") || info.contains("siblings")) {
