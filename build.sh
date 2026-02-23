@@ -39,7 +39,7 @@ if hasArg --run-java-tests; then
   MAVEN_VERIFY_ARGS=("-Dtest=Test*")
 elif hasArg --run-perf-tests; then
   # Run a subset of tests that use Wiki 1Mx768 dataset to gauge index build and search times
-  MAVEN_VERIFY_ARGS=("-Dtest=Perf*", "-DforkCount=1")
+  MAVEN_VERIFY_ARGS=("-Dtest=Perf*" "-DreuseForks=false")
   # download dataset if not present
   FOLDER="test-dataset"
   FILE="$FOLDER/wiki_all_1M.tar"

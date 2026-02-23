@@ -82,6 +82,12 @@
       <artifactId>cuvs-java</artifactId>
       <!--CUVS_LUCENE#VERSION_UPDATE_MARKER_START--><version>26.04.0</version><!--CUVS_LUCENE#VERSION_UPDATE_MARKER_END-->
     </dependency>
+    <dependency>
+        <groupId>tools.jackson.core</groupId>
+        <artifactId>jackson-databind</artifactId>
+        <version>3.0.4</version>
+        <scope>test</scope>
+    </dependency>
   </dependencies>
 
   <build>

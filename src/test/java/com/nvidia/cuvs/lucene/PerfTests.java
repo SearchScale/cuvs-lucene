@@ -157,7 +157,7 @@ public class PerfTests extends LuceneTestCase {
       for (int pi = 0; pi < numThreads; pi++) {
         pool.submit(
             () -> {
-              while (id.getAndIncrement() <= dataset.size()) {
+              while (id.getAndIncrement() < dataset.size()) {
                 try {
                   Document document = new Document();
                   document.add(
@@ -183,7 +183,7 @@ public class PerfTests extends LuceneTestCase {
     Map<String, Object> testMap = (Map<String, Object>) reports.get(testName);
     Map<String, Object> testCodecMap = (Map<String, Object>) testMap.get(codec.getName());
     Map<String, Object> testInfoMap = new LinkedHashMap<String, Object>();
-    testInfoMap.put("Num Documents", id.get());
+    testInfoMap.put("Num Documents", id.get() - 1);
     testInfoMap.put("Index Build Time [ms]", sw.getTime());
     testCodecMap.put("Details", testInfoMap);
 
