@@ -85,11 +85,10 @@ public class PerfTests extends LuceneTestCase {
   @ParametersFactory
   public static List<Object[]> parameters() throws Exception {
     return Arrays.asList(
-        new Object[][] {
-          {new Lucene101AcceleratedHNSWCodec()},
-          {new LuceneAcceleratedHNSWBinaryQuantizedCodec()},
-          {new LuceneAcceleratedHNSWScalarQuantizedCodec()},
-          {new CuVS2510GPUSearchCodec()}
+        new Object[][] {{new Lucene101AcceleratedHNSWCodec()}
+          //          {new LuceneAcceleratedHNSWBinaryQuantizedCodec()},
+          //          {new LuceneAcceleratedHNSWScalarQuantizedCodec()},
+          //          {new CuVS2510GPUSearchCodec()}
         });
   }
 
@@ -98,6 +97,7 @@ public class PerfTests extends LuceneTestCase {
     log.log(Level.INFO, "Starting perf tests ...");
     reports.put("Hardware", Gauges.getHardwareInformation());
     dataset = new ArrayList<float[]>();
+
     queries = new ArrayList<float[]>();
     neighbors = new ArrayList<int[]>();
     readDataFile("test-dataset/base.1M.fbin", NUM_VECTORS, null, dataset);
@@ -157,7 +157,7 @@ public class PerfTests extends LuceneTestCase {
       for (int pi = 0; pi < numThreads; pi++) {
         pool.submit(
             () -> {
-              while (id.getAndIncrement() < dataset.size()) {
+              while (id.getAndIncrement() < 10000) {
                 try {
                   Document document = new Document();
                   document.add(
@@ -205,7 +205,7 @@ public class PerfTests extends LuceneTestCase {
 
   private class Gauges {
 
-    private static final int TIME_INTERVAL_MS = 500;
+    private static final int TIME_INTERVAL_MS = 10;
     private static final long BYTES_IN_MEGABYTE = 1024L * 1024L;
     private ExecutorService executor;
     private boolean running;

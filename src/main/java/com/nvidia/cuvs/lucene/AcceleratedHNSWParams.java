@@ -136,7 +136,7 @@ public class AcceleratedHNSWParams {
     private int writerThreads = 1;
     private int intermediateGraphDegree = 128;
     private int graphdegree = 64;
-    private int hnswLayers = 2;
+    private int hnswLayers = 1;
     private int maxConn = 8;
     private int beamWidth = 16;
 

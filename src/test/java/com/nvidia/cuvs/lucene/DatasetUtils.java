@@ -54,12 +54,12 @@ public class DatasetUtils {
           for (int i = 0; i < dimension; i++) {
             frow[i] = bb.getFloat();
           }
-          fts.add(frow);
+          fts.add(frow.clone());
         } else if (filePath.endsWith("ibin")) {
           for (int i = 0; i < dimension; i++) {
             irow[i] = bb.getInt();
           }
-          its.add(irow);
+          its.add(irow.clone());
         }
         count++;
         if (count % (int) (numRows / 4) == 0) {

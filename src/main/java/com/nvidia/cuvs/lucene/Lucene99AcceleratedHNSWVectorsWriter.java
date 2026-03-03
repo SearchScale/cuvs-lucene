@@ -17,6 +17,9 @@ import static org.apache.lucene.util.RamUsageEstimator.shallowSizeOfInstance;
 import com.nvidia.cuvs.CagraIndex;
 import com.nvidia.cuvs.CagraIndexParams;
 import com.nvidia.cuvs.CagraIndexParams.CagraGraphBuildAlgo;
+import com.nvidia.cuvs.CuVSIvfPqIndexParams;
+import com.nvidia.cuvs.CuVSIvfPqParams;
+import com.nvidia.cuvs.CuVSIvfPqSearchParams;
 import com.nvidia.cuvs.CuVSMatrix;
 import com.nvidia.cuvs.RowView;
 import java.io.IOException;
@@ -173,11 +176,22 @@ public class Lucene99AcceleratedHNSWVectorsWriter extends KnnVectorsWriter {
    */
   private CagraIndexParams cagraIndexParams() {
     // TODO: Make build algorithm configurable after fixing the related issue.
+
+    CuVSIvfPqIndexParams iip = new CuVSIvfPqIndexParams.Builder().withNLists(30).build();
+    CuVSIvfPqSearchParams isp = new CuVSIvfPqSearchParams.Builder().build();
+
+    CuVSIvfPqParams ip =
+        new CuVSIvfPqParams.Builder()
+            .withCuVSIvfPqIndexParams(iip)
+            .withCuVSIvfPqSearchParams(isp)
+            .build();
+
     return new CagraIndexParams.Builder()
         .withNumWriterThreads(acceleratedHNSWParams.getWriterThreads())
         .withIntermediateGraphDegree(acceleratedHNSWParams.getIntermediateGraphDegree())
         .withGraphDegree(acceleratedHNSWParams.getGraphdegree())
-        .withCagraGraphBuildAlgo(CagraGraphBuildAlgo.NN_DESCENT)
+        .withCagraGraphBuildAlgo(CagraGraphBuildAlgo.IVF_PQ)
+        .withCuVSIvfPqParams(ip)
         .build();
   }
 
@@ -217,7 +231,7 @@ public class Lucene99AcceleratedHNSWVectorsWriter extends KnnVectorsWriter {
         writeSingleVectorGraph(fieldInfo, vectors);
         return;
       }
-
+      System.out.println("------------------>");
       long startTime = System.nanoTime();
       CagraIndexParams params = cagraIndexParams();
       CagraIndex cagraIndex =
@@ -225,6 +239,7 @@ public class Lucene99AcceleratedHNSWVectorsWriter extends KnnVectorsWriter {
               .withDataset(dataset)
               .withIndexParams(params)
               .build();
+      System.out.println("------------------>");
 
       // Get the adjacency list from CAGRA index
       CuVSMatrix adjacencyListMatrix = cagraIndex.getGraph();
