@@ -6,6 +6,7 @@ package com.nvidia.cuvs.lucene;
 
 import static org.apache.lucene.search.DocIdSetIterator.NO_MORE_DOCS;
 
+import com.nvidia.cuvs.CagraIndexParams.CodebookGen;
 import com.nvidia.cuvs.CagraIndexParams.CudaDataType;
 import com.nvidia.cuvs.CuVSIvfPqIndexParams;
 import com.nvidia.cuvs.CuVSIvfPqParams;
@@ -229,7 +230,7 @@ public class Utils {
       } else if (n_features <= 192) {
         pq_dim = 96;
       } else {
-        pq_dim = 0; // raft::round_up_safe<uint32_t>(n_features / 2, 128);
+        pq_dim = (int) Math.round(Math.ceil(n_features / 2));
       }
     }
 
@@ -242,7 +243,12 @@ public class Utils {
     double min_kmeans_trainset_fraction =
         Math.min(max_kmeans_trainset_fraction, min_kmeans_trainset_points / n_rows);
 
-    //	      std::min(max_kmeans_trainset_fraction, min_kmeans_trainset_points / n_rows);
+    double kmeans_trainset_fraction =
+        Math.clamp(
+            (1.0 / Math.sqrt(n_rows * 1e-5)),
+            min_kmeans_trainset_fraction,
+            max_kmeans_trainset_fraction);
+
     //	    build_params.kmeans_trainset_fraction = std::clamp(
     //	      1.0 / std::sqrt(n_rows * 1e-5), min_kmeans_trainset_fraction,
     // max_kmeans_trainset_fraction);
@@ -263,6 +269,9 @@ public class Utils {
             .withPqBits(pq_bits)
             .withPqDim(pq_dim)
             .withKmeansNIters(kmeans_n_iters)
+            .withNLists(n_lists)
+            .withCodebookKind(CodebookGen.PER_SUBSPACE)
+            .withKmeansTrainsetFraction(kmeans_trainset_fraction)
             .build();
 
     int n_probes = (int) Math.round(Math.sqrt(n_lists) / 20 + 4);
