@@ -6,6 +6,10 @@ package com.nvidia.cuvs.lucene;
 
 import static org.apache.lucene.search.DocIdSetIterator.NO_MORE_DOCS;
 
+import com.nvidia.cuvs.CagraIndexParams;
+import com.nvidia.cuvs.CagraIndexParams.CuvsDistanceType;
+import com.nvidia.cuvs.CagraIndexParams.HnswHeuristicType;
+import com.nvidia.cuvs.CuVSIvfPqParams;
 import com.nvidia.cuvs.CuVSMatrix;
 import com.nvidia.cuvs.CuVSResources;
 import java.io.IOException;
@@ -204,5 +208,16 @@ public class Utils {
     if (infoStream.isEnabled(component)) {
       infoStream.message(component, msg);
     }
+  }
+
+  static CuVSIvfPqParams getSuggestedIvfPqParams(int rows, int dimensions) {
+    return CagraIndexParams.fromHnswParams(
+            rows,
+            dimensions,
+            0,
+            0,
+            HnswHeuristicType.SAME_GRAPH_FOOTPRINT,
+            CuvsDistanceType.L2Expanded)
+        .getCuVSIvfPqParams();
   }
 }

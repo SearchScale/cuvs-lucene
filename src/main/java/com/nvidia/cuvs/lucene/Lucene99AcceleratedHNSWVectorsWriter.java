@@ -159,21 +159,21 @@ public class Lucene99AcceleratedHNSWVectorsWriter extends KnnVectorsWriter {
       CuVSMatrix dataset =
           Utils.createFloatMatrix(
               vectors, fieldInfo.getVectorDimension(), getCuVSResourcesInstance());
+      int size = (int) dataset.size();
+      int dimensions = fieldInfo.getVectorDimension();
       CagraIndexParams params =
           cagraIndexParams(
               acceleratedHNSWParams.getWriterThreads(),
               acceleratedHNSWParams.getIntermediateGraphDegree(),
               acceleratedHNSWParams.getGraphdegree(),
               acceleratedHNSWParams.getCagraGraphBuildAlgo(),
-              acceleratedHNSWParams.getCuVSIvfPqParams());
+              Utils.getSuggestedIvfPqParams(size, dimensions));
       CagraIndex cagraIndex =
           CagraIndex.newBuilder(getCuVSResourcesInstance())
               .withDataset(dataset)
               .withIndexParams(params)
               .build();
       CuVSMatrix adjacencyListMatrix = cagraIndex.getGraph();
-      int size = (int) dataset.size();
-      int dimensions = fieldInfo.getVectorDimension();
       GPUBuiltHnswGraph hnswGraph =
           createMultiLayerHnswGraph(
               fieldInfo,
