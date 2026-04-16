@@ -6,10 +6,10 @@ package com.nvidia.cuvs.lucene;
 
 import static org.apache.lucene.search.DocIdSetIterator.NO_MORE_DOCS;
 
-import com.nvidia.cuvs.CagraIndexParams;
-import com.nvidia.cuvs.CagraIndexParams.CuvsDistanceType;
-import com.nvidia.cuvs.CagraIndexParams.HnswHeuristicType;
+import com.nvidia.cuvs.CagraIndexParams.CudaDataType;
+import com.nvidia.cuvs.CuVSIvfPqIndexParams;
 import com.nvidia.cuvs.CuVSIvfPqParams;
+import com.nvidia.cuvs.CuVSIvfPqSearchParams;
 import com.nvidia.cuvs.CuVSMatrix;
 import com.nvidia.cuvs.CuVSResources;
 import java.io.IOException;
@@ -210,14 +210,78 @@ public class Utils {
     }
   }
 
-  static CuVSIvfPqParams getSuggestedIvfPqParams(int rows, int dimensions) {
-    return CagraIndexParams.fromHnswParams(
-            rows,
-            dimensions,
-            0,
-            0,
-            HnswHeuristicType.SAME_GRAPH_FOOTPRINT,
-            CuvsDistanceType.L2Expanded)
-        .getCuVSIvfPqParams();
+  static CuVSIvfPqParams getSuggestedIvfPqParams(int n_rows, int n_features) {
+    System.out.println("n_rows: " + n_rows + " n_features: " + n_features);
+    int pq_dim = 0;
+    int pq_bits = 0;
+    int n_lists = 0;
+    int kmeans_n_iters = 0;
+
+    if (n_features <= 32) {
+      pq_dim = 16;
+      pq_bits = 8;
+    } else {
+      pq_bits = 4;
+      if (n_features <= 64) {
+        pq_dim = 32;
+      } else if (n_features <= 128) {
+        pq_dim = 64;
+      } else if (n_features <= 192) {
+        pq_dim = 96;
+      } else {
+        pq_dim = 0; // raft::round_up_safe<uint32_t>(n_features / 2, 128);
+      }
+    }
+
+    n_lists = Math.max(1, n_rows / 2000);
+    kmeans_n_iters = 10;
+
+    double kMinPointsPerCluster = 32;
+    double min_kmeans_trainset_points = kMinPointsPerCluster * n_lists;
+    double max_kmeans_trainset_fraction = 1.0;
+    double min_kmeans_trainset_fraction =
+        Math.min(max_kmeans_trainset_fraction, min_kmeans_trainset_points / n_rows);
+
+    //	      std::min(max_kmeans_trainset_fraction, min_kmeans_trainset_points / n_rows);
+    //	    build_params.kmeans_trainset_fraction = std::clamp(
+    //	      1.0 / std::sqrt(n_rows * 1e-5), min_kmeans_trainset_fraction,
+    // max_kmeans_trainset_fraction);
+    //	    build_params.codebook_kind = ivf_pq::codebook_gen::PER_SUBSPACE;
+    //
+    //	    search_params                         = cuvs::neighbors::ivf_pq::search_params{};
+    //	    search_params.n_probes                = std::round(std::sqrt(build_params.n_lists) / 20 +
+    // 4);
+    //	    search_params.lut_dtype               = CUDA_R_16F;
+    //	    search_params.internal_distance_dtype = CUDA_R_16F;
+    //	    search_params.coarse_search_dtype     = CUDA_R_16F;
+    //	    search_params.max_internal_batch_size = 128 * 1024;
+
+    int refinement_rate = 1;
+
+    CuVSIvfPqIndexParams cip =
+        new CuVSIvfPqIndexParams.Builder()
+            .withPqBits(pq_bits)
+            .withPqDim(pq_dim)
+            .withKmeansNIters(kmeans_n_iters)
+            .build();
+
+    int n_probes = (int) Math.round(Math.sqrt(n_lists) / 20 + 4);
+
+    CuVSIvfPqSearchParams csp =
+        new CuVSIvfPqSearchParams.Builder()
+            .withNProbes(n_probes)
+            .withInternalDistanceDtype(CudaDataType.CUDA_R_16F)
+            .withLutDtype(CudaDataType.CUDA_R_16F)
+            .build();
+
+    CuVSIvfPqParams ip =
+        new CuVSIvfPqParams.Builder()
+            .withCuVSIvfPqIndexParams(cip)
+            .withCuVSIvfPqSearchParams(csp)
+            .withRefinementRate(refinement_rate)
+            .build();
+
+    System.out.println(ip);
+    return ip;
   }
 }
