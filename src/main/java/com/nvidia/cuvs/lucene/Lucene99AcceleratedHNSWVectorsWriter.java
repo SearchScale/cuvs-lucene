@@ -4,7 +4,6 @@
  */
 package com.nvidia.cuvs.lucene;
 
-import static com.nvidia.cuvs.lucene.AcceleratedHNSWUtils.cagraIndexParams;
 import static com.nvidia.cuvs.lucene.AcceleratedHNSWUtils.createMultiLayerHnswGraph;
 import static com.nvidia.cuvs.lucene.AcceleratedHNSWUtils.createSingleVectorHnswGraph;
 import static com.nvidia.cuvs.lucene.AcceleratedHNSWUtils.printInfoStream;
@@ -23,6 +22,8 @@ import static org.apache.lucene.util.RamUsageEstimator.shallowSizeOfInstance;
 
 import com.nvidia.cuvs.CagraIndex;
 import com.nvidia.cuvs.CagraIndexParams;
+import com.nvidia.cuvs.CagraIndexParams.CuvsDistanceType;
+import com.nvidia.cuvs.CagraIndexParams.HnswHeuristicType;
 import com.nvidia.cuvs.CuVSMatrix;
 import com.nvidia.cuvs.lucene.AcceleratedHNSWUtils.QuantizationType;
 import java.io.IOException;
@@ -161,13 +162,25 @@ public class Lucene99AcceleratedHNSWVectorsWriter extends KnnVectorsWriter {
               vectors, fieldInfo.getVectorDimension(), getCuVSResourcesInstance());
       int size = (int) dataset.size();
       int dimensions = fieldInfo.getVectorDimension();
+      //      CagraIndexParams params =
+      //          cagraIndexParams(
+      //              acceleratedHNSWParams.getWriterThreads(),
+      //              acceleratedHNSWParams.getIntermediateGraphDegree(),
+      //              acceleratedHNSWParams.getGraphdegree(),
+      //              acceleratedHNSWParams.getCagraGraphBuildAlgo(),
+      //              Utils.getSuggestedCuVSIvfPqParams(size, dimensions));
+      //      System.out.println(params);
+
       CagraIndexParams params =
-          cagraIndexParams(
-              acceleratedHNSWParams.getWriterThreads(),
-              acceleratedHNSWParams.getIntermediateGraphDegree(),
-              acceleratedHNSWParams.getGraphdegree(),
-              acceleratedHNSWParams.getCagraGraphBuildAlgo(),
-              Utils.getSuggestedCuVSIvfPqParams(size, dimensions));
+          Utils.getCagraIndexParamsForHNSW(
+              size,
+              dimensions,
+              acceleratedHNSWParams.getMaxConn(),
+              acceleratedHNSWParams.getBeamWidth(),
+              HnswHeuristicType.SAME_GRAPH_FOOTPRINT,
+              CuvsDistanceType.L2Expanded);
+      System.out.println("******************************** " + params);
+
       CagraIndex cagraIndex =
           CagraIndex.newBuilder(getCuVSResourcesInstance())
               .withDataset(dataset)

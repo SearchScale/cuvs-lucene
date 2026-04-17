@@ -6,13 +6,17 @@ package com.nvidia.cuvs.lucene;
 
 import static org.apache.lucene.search.DocIdSetIterator.NO_MORE_DOCS;
 
+import com.nvidia.cuvs.CagraIndexParams;
 import com.nvidia.cuvs.CagraIndexParams.CodebookGen;
 import com.nvidia.cuvs.CagraIndexParams.CudaDataType;
+import com.nvidia.cuvs.CagraIndexParams.CuvsDistanceType;
+import com.nvidia.cuvs.CagraIndexParams.HnswHeuristicType;
 import com.nvidia.cuvs.CuVSIvfPqIndexParams;
 import com.nvidia.cuvs.CuVSIvfPqParams;
 import com.nvidia.cuvs.CuVSIvfPqSearchParams;
 import com.nvidia.cuvs.CuVSMatrix;
 import com.nvidia.cuvs.CuVSResources;
+import com.nvidia.cuvs.spi.CuVSProvider;
 import java.io.IOException;
 import java.time.Duration;
 import java.util.ArrayList;
@@ -277,8 +281,19 @@ public class Utils {
             .withRefinementRate(refinementRate)
             .build();
     log.log(
-        Level.FINE,
+        Level.INFO,
         "dataset: " + rows + "x" + dimensions + " > " + cuVSIvfPqIndexParams.toString());
     return cuVSIvfPqParams;
+  }
+
+  public static CagraIndexParams getCagraIndexParamsForHNSW(
+      long rows,
+      long dim,
+      int m,
+      int efConstruction,
+      HnswHeuristicType heuristic,
+      CuvsDistanceType metric) {
+    return CuVSProvider.provider()
+        .cagraIndexParamsFromHnswParams(rows, dim, m, efConstruction, heuristic, metric);
   }
 }
