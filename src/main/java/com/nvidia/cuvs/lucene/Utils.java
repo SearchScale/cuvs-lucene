@@ -211,68 +211,74 @@ public class Utils {
     }
   }
 
-  static CuVSIvfPqParams getSuggestedIvfPqParams(int n_rows, int n_features) {
-    int pq_dim = 0;
-    int pq_bits = 0;
+  /**
+   * Utility to get an instance of CuVSIvfPqParams with suggested parameters based on the data set shape.
+   *
+   * @param rows number of rows in the data set
+   * @param dimensions dimension of the vectors in the data set
+   * @return an instance of CuVSIvfPqParams
+   */
+  static CuVSIvfPqParams getSuggestedCuVSIvfPqParams(int rows, int dimensions) {
+    int pqDim = 0;
+    int pqBits = 0;
 
-    if (n_features <= 32) {
-      pq_dim = 16;
-      pq_bits = 8;
+    if (dimensions <= 32) {
+      pqDim = 16;
+      pqBits = 8;
     } else {
-      pq_bits = 4;
-      if (n_features <= 64) {
-        pq_dim = 32;
-      } else if (n_features <= 128) {
-        pq_dim = 64;
-      } else if (n_features <= 192) {
-        pq_dim = 96;
+      pqBits = 4;
+      if (dimensions <= 64) {
+        pqDim = 32;
+      } else if (dimensions <= 128) {
+        pqDim = 64;
+      } else if (dimensions <= 192) {
+        pqDim = 96;
       } else {
-        pq_dim = (int) Math.round(Math.ceil(n_features / 2));
+        pqDim = (int) Math.round(Math.ceil(dimensions / 2));
       }
     }
 
-    int n_lists = Math.max(1, n_rows / 2000);
+    int nLists = Math.max(1, rows / 2000);
     double kMinPointsPerCluster = 32;
-    double min_kmeans_trainset_points = kMinPointsPerCluster * n_lists;
-    double max_kmeans_trainset_fraction = 1.0;
-    double min_kmeans_trainset_fraction =
-        Math.min(max_kmeans_trainset_fraction, min_kmeans_trainset_points / n_rows);
+    double minKmeansTrainsetPoints = kMinPointsPerCluster * nLists;
+    double maxKmeansTrainsetFraction = 1.0;
+    double minKmeansTrainsetFraction =
+        Math.min(maxKmeansTrainsetFraction, minKmeansTrainsetPoints / rows);
 
-    double kmeans_trainset_fraction =
+    double kmeansTrainsetFraction =
         Math.clamp(
-            (1.0 / Math.sqrt(n_rows * 1e-5)),
-            min_kmeans_trainset_fraction,
-            max_kmeans_trainset_fraction);
+            (1.0 / Math.sqrt(rows * 1e-5)), minKmeansTrainsetFraction, maxKmeansTrainsetFraction);
 
-    int kmeans_n_iters = 10;
-    int n_probes = (int) Math.round(Math.sqrt(n_lists) / 20 + 4);
-    int refinement_rate = 1;
+    int kmeansNIters = 10;
+    int nProbes = (int) Math.round(Math.sqrt(nLists) / 20 + 4);
+    int refinementRate = 1;
 
-    CuVSIvfPqIndexParams cip =
+    CuVSIvfPqIndexParams cuVSIvfPqIndexParams =
         new CuVSIvfPqIndexParams.Builder()
-            .withPqBits(pq_bits)
-            .withPqDim(pq_dim)
-            .withKmeansNIters(kmeans_n_iters)
-            .withNLists(n_lists)
+            .withPqBits(pqBits)
+            .withPqDim(pqDim)
+            .withKmeansNIters(kmeansNIters)
+            .withNLists(nLists)
             .withCodebookKind(CodebookGen.PER_SUBSPACE)
-            .withKmeansTrainsetFraction(kmeans_trainset_fraction)
+            .withKmeansTrainsetFraction(kmeansTrainsetFraction)
             .build();
 
-    CuVSIvfPqSearchParams csp =
+    CuVSIvfPqSearchParams cuVSIvfPqSearchParams =
         new CuVSIvfPqSearchParams.Builder()
-            .withNProbes(n_probes)
+            .withNProbes(nProbes)
             .withInternalDistanceDtype(CudaDataType.CUDA_R_16F)
             .withLutDtype(CudaDataType.CUDA_R_16F)
             .build();
 
-    CuVSIvfPqParams ip =
+    CuVSIvfPqParams cuVSIvfPqParams =
         new CuVSIvfPqParams.Builder()
-            .withCuVSIvfPqIndexParams(cip)
-            .withCuVSIvfPqSearchParams(csp)
-            .withRefinementRate(refinement_rate)
+            .withCuVSIvfPqIndexParams(cuVSIvfPqIndexParams)
+            .withCuVSIvfPqSearchParams(cuVSIvfPqSearchParams)
+            .withRefinementRate(refinementRate)
             .build();
-
-    log.log(Level.FINE, "For dataset: " + n_rows + "x" + n_features + " > " + ip.toString());
-    return ip;
+    log.log(
+        Level.FINE,
+        "dataset: " + rows + "x" + dimensions + " > " + cuVSIvfPqIndexParams.toString());
+    return cuVSIvfPqParams;
   }
 }
