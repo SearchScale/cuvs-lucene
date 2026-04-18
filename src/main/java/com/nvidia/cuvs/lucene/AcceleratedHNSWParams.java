@@ -6,6 +6,8 @@
 package com.nvidia.cuvs.lucene;
 
 import com.nvidia.cuvs.CagraIndexParams.CagraGraphBuildAlgo;
+import com.nvidia.cuvs.CagraIndexParams.CuvsDistanceType;
+import com.nvidia.cuvs.CagraIndexParams.HnswHeuristicType;
 import com.nvidia.cuvs.CuVSIvfPqParams;
 import java.util.Objects;
 import java.util.concurrent.ExecutorService;
@@ -42,6 +44,10 @@ public class AcceleratedHNSWParams {
   public static final CagraGraphBuildAlgo DEFAULT_CAGRA_GRAPH_BUILD_ALGO =
       CagraGraphBuildAlgo.NN_DESCENT;
   public static final int DEFAULT_NUM_MERGE_WORKERS = 1;
+  public static final HnswHeuristicType DEFAULT_HEURISTIC_TYPE =
+      HnswHeuristicType.SAME_GRAPH_FOOTPRINT;
+  public static final CuvsDistanceType DEFAULT_CUVS_DISTANCE_TYPE = CuvsDistanceType.L2Expanded;
+  public static final boolean DEFAULT_IS_DYNAMIC_BUILD_ALGO = true;
 
   public static final Supplier<CuVSIvfPqParams> DEFAULT_IVF_PQ_PARAMS =
       () -> {
@@ -63,6 +69,9 @@ public class AcceleratedHNSWParams {
   private final CuVSIvfPqParams cuVSIvfPqParams;
   private final int numMergeWorkers;
   private final ExecutorService mergeExec;
+  private final HnswHeuristicType heuristicType;
+  private final CuvsDistanceType cuvsDistanceType;
+  private final boolean isDynamicBuildAlgo;
 
   /**
    * Constructs an instance of {@link AcceleratedHNSWParams} with specific parameter values.
@@ -89,7 +98,10 @@ public class AcceleratedHNSWParams {
       CagraGraphBuildAlgo cagraGraphBuildAlgo,
       CuVSIvfPqParams cuVSIvfPqParams,
       int numMergeWorkers,
-      ExecutorService mergeExec) {
+      ExecutorService mergeExec,
+      HnswHeuristicType heuristicType,
+      CuvsDistanceType cuvsDistanceType,
+      boolean isDynamicBuildAlgo) {
     super();
     this.writerThreads = writerThreads;
     this.intermediateGraphDegree = intermediateGraphDegree;
@@ -101,6 +113,9 @@ public class AcceleratedHNSWParams {
     this.cuVSIvfPqParams = cuVSIvfPqParams;
     this.numMergeWorkers = numMergeWorkers;
     this.mergeExec = mergeExec;
+    this.heuristicType = heuristicType;
+    this.cuvsDistanceType = cuvsDistanceType;
+    this.isDynamicBuildAlgo = isDynamicBuildAlgo;
   }
 
   /**
@@ -193,6 +208,32 @@ public class AcceleratedHNSWParams {
     return mergeExec;
   }
 
+  /**
+   * Get the instance of {@link HnswHeuristicType} to be used
+   *
+   * @return the instance of {@link HnswHeuristicType}
+   */
+  public HnswHeuristicType getHeuristicType() {
+    return heuristicType;
+  }
+
+  /**
+   * Get the instance of {@link CuvsDistanceType} to be used
+   *
+   * @return the instance of {@link CuvsDistanceType}
+   */
+  public CuvsDistanceType getCuvsDistanceType() {
+    return cuvsDistanceType;
+  }
+
+  /**
+   *
+   * @return
+   */
+  public boolean isUseDynamicBuildAlgo() {
+    return isDynamicBuildAlgo;
+  }
+
   @Override
   public String toString() {
     return "AcceleratedHNSWParams [writerThreads="
@@ -209,10 +250,18 @@ public class AcceleratedHNSWParams {
         + beamWidth
         + ", cagraGraphBuildAlgo="
         + cagraGraphBuildAlgo
+        + ", cuVSIvfPqParams="
+        + cuVSIvfPqParams
         + ", numMergeWorkers="
         + numMergeWorkers
         + ", mergeExec="
         + mergeExec
+        + ", heuristicType="
+        + heuristicType
+        + ", cuvsDistanceType="
+        + cuvsDistanceType
+        + ", isDynamicBuildAlgo="
+        + isDynamicBuildAlgo
         + "]";
   }
 
@@ -231,6 +280,9 @@ public class AcceleratedHNSWParams {
     private int numMergeWorkers = DEFAULT_NUM_MERGE_WORKERS;
     private CuVSIvfPqParams cuVSIvfPqParams = null;
     private ExecutorService mergeExec = null;
+    private HnswHeuristicType heuristicType = DEFAULT_HEURISTIC_TYPE;
+    private CuvsDistanceType cuvsDistanceType = DEFAULT_CUVS_DISTANCE_TYPE;
+    private boolean useDynamicBuildAlgo = DEFAULT_IS_DYNAMIC_BUILD_ALGO;
 
     /**
      * Set the number of cuVS writer threads while building the index
@@ -358,6 +410,37 @@ public class AcceleratedHNSWParams {
     }
 
     /**
+     * Set the {@link HnswHeuristicType}
+     *
+     * @param heuristicType
+     * @return instance of {@link Builder}
+     */
+    public Builder withHnswHeuristicType(HnswHeuristicType heuristicType) {
+      return this;
+    }
+
+    /**
+     * Set the {@link CuvsDistanceType}
+     *
+     * @param cuvsDistanceType
+     * @return instance of {@link Builder}
+     */
+    public Builder withCuvsDistanceType(CuvsDistanceType cuvsDistanceType) {
+      return this;
+    }
+
+    /**
+     * Set if we should use dynamic algo selection based on the data shape
+     *
+     * @param useDynamicBuildAlgo
+     * @return instance of {@link Builder}
+     */
+    public Builder withUseDynamicBuildAlgo(boolean useDynamicBuildAlgo) {
+      this.useDynamicBuildAlgo = useDynamicBuildAlgo;
+      return this;
+    }
+
+    /**
      * Validates the input parameters.
      *
      * @throws IllegalArgumentException
@@ -448,7 +531,10 @@ public class AcceleratedHNSWParams {
           cagraGraphBuildAlgo,
           cuVSIvfPqParams,
           numMergeWorkers,
-          mergeExec);
+          mergeExec,
+          heuristicType,
+          cuvsDistanceType,
+          useDynamicBuildAlgo);
     }
   }
 }

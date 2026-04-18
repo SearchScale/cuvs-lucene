@@ -159,21 +159,36 @@ public class Lucene99AcceleratedHNSWVectorsWriter extends KnnVectorsWriter {
       CuVSMatrix dataset =
           Utils.createFloatMatrix(
               vectors, fieldInfo.getVectorDimension(), getCuVSResourcesInstance());
-      CagraIndexParams params =
-          cagraIndexParams(
-              acceleratedHNSWParams.getWriterThreads(),
-              acceleratedHNSWParams.getIntermediateGraphDegree(),
-              acceleratedHNSWParams.getGraphdegree(),
-              acceleratedHNSWParams.getCagraGraphBuildAlgo(),
-              acceleratedHNSWParams.getCuVSIvfPqParams());
+      int size = (int) dataset.size();
+      int dimensions = fieldInfo.getVectorDimension();
+
+      CagraIndexParams params;
+      if (acceleratedHNSWParams.isUseDynamicBuildAlgo()) {
+        params =
+            CagraIndexParams.fromHnswParams(
+                size,
+                dimensions,
+                acceleratedHNSWParams.getMaxConn(),
+                acceleratedHNSWParams.getBeamWidth(),
+                acceleratedHNSWParams.getHeuristicType(),
+                acceleratedHNSWParams.getCuvsDistanceType());
+      } else {
+        // fallback (may not be needed at some point in the future).
+        params =
+            cagraIndexParams(
+                acceleratedHNSWParams.getWriterThreads(),
+                acceleratedHNSWParams.getIntermediateGraphDegree(),
+                acceleratedHNSWParams.getGraphdegree(),
+                acceleratedHNSWParams.getCagraGraphBuildAlgo(),
+                acceleratedHNSWParams.getCuVSIvfPqParams());
+      }
+
       CagraIndex cagraIndex =
           CagraIndex.newBuilder(getCuVSResourcesInstance())
               .withDataset(dataset)
               .withIndexParams(params)
               .build();
       CuVSMatrix adjacencyListMatrix = cagraIndex.getGraph();
-      int size = (int) dataset.size();
-      int dimensions = fieldInfo.getVectorDimension();
       GPUBuiltHnswGraph hnswGraph =
           createMultiLayerHnswGraph(
               fieldInfo,
