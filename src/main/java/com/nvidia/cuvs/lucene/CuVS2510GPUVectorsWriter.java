@@ -237,7 +237,7 @@ public class CuVS2510GPUVectorsWriter extends KnnVectorsWriter {
    * Builds and writes the CAGRA index.
    *
    * @param os Instance of the OutputStream
-   * @param dataset The instance of CuVSMatrix holding the dataset
+   * @param dataset The instance of CuVSMatrix holding the data set
    * @throws Throwable
    */
   private void writeCagraIndex(OutputStream os, CuVSMatrix dataset) throws Throwable {

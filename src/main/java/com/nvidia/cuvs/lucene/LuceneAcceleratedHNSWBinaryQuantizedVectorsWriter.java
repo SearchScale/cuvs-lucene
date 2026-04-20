@@ -158,19 +158,34 @@ public class LuceneAcceleratedHNSWBinaryQuantizedVectorsWriter extends KnnVector
 
       CuVSMatrix dataset =
           Utils.createByteMatrix(vectors, bytesPerVector, getCuVSResourcesInstance());
+      int size = (int) dataset.size();
 
-      if (dataset.size() < 2) {
+      if (size < 2) {
         writeSingleVectorGraph(fieldInfo, vectors);
         return;
       }
 
-      CagraIndexParams params =
-          cagraIndexParams(
-              acceleratedHNSWParams.getWriterThreads(),
-              acceleratedHNSWParams.getIntermediateGraphDegree(),
-              acceleratedHNSWParams.getGraphdegree(),
-              acceleratedHNSWParams.getCagraGraphBuildAlgo(),
-              acceleratedHNSWParams.getCuVSIvfPqParams());
+      CagraIndexParams params;
+      if (acceleratedHNSWParams.isUseDynamicBuildAlgo()) {
+        params =
+            CagraIndexParams.fromHnswParams(
+                size,
+                dimensions,
+                acceleratedHNSWParams.getMaxConn(),
+                acceleratedHNSWParams.getBeamWidth(),
+                acceleratedHNSWParams.getHeuristicType(),
+                acceleratedHNSWParams.getCuvsDistanceType());
+      } else {
+        // fallback (may not be needed at some point in the future).
+        params =
+            cagraIndexParams(
+                acceleratedHNSWParams.getWriterThreads(),
+                acceleratedHNSWParams.getIntermediateGraphDegree(),
+                acceleratedHNSWParams.getGraphdegree(),
+                acceleratedHNSWParams.getCagraGraphBuildAlgo(),
+                acceleratedHNSWParams.getCuVSIvfPqParams());
+      }
+
       CagraIndex cagraIndex =
           CagraIndex.newBuilder(getCuVSResourcesInstance())
               .withDataset(dataset)
@@ -178,7 +193,6 @@ public class LuceneAcceleratedHNSWBinaryQuantizedVectorsWriter extends KnnVector
               .build();
 
       CuVSMatrix adjacencyListMatrix = cagraIndex.getGraph();
-      int size = (int) dataset.size();
 
       // Create multi-layer HNSW graph from CAGRA
       GPUBuiltHnswGraph hnswGraph =

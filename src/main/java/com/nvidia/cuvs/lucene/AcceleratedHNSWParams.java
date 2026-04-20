@@ -47,7 +47,7 @@ public class AcceleratedHNSWParams {
   public static final HnswHeuristicType DEFAULT_HEURISTIC_TYPE =
       HnswHeuristicType.SAME_GRAPH_FOOTPRINT;
   public static final CuvsDistanceType DEFAULT_CUVS_DISTANCE_TYPE = CuvsDistanceType.L2Expanded;
-  public static final boolean DEFAULT_IS_DYNAMIC_BUILD_ALGO = true;
+  public static final boolean DEFAULT_USE_DYNAMIC_BUILD_ALGO = true;
 
   public static final Supplier<CuVSIvfPqParams> DEFAULT_IVF_PQ_PARAMS =
       () -> {
@@ -71,7 +71,7 @@ public class AcceleratedHNSWParams {
   private final ExecutorService mergeExec;
   private final HnswHeuristicType heuristicType;
   private final CuvsDistanceType cuvsDistanceType;
-  private final boolean isDynamicBuildAlgo;
+  private final boolean useDynamicBuildAlgo;
 
   /**
    * Constructs an instance of {@link AcceleratedHNSWParams} with specific parameter values.
@@ -101,7 +101,7 @@ public class AcceleratedHNSWParams {
       ExecutorService mergeExec,
       HnswHeuristicType heuristicType,
       CuvsDistanceType cuvsDistanceType,
-      boolean isDynamicBuildAlgo) {
+      boolean useDynamicBuildAlgo) {
     super();
     this.writerThreads = writerThreads;
     this.intermediateGraphDegree = intermediateGraphDegree;
@@ -115,7 +115,7 @@ public class AcceleratedHNSWParams {
     this.mergeExec = mergeExec;
     this.heuristicType = heuristicType;
     this.cuvsDistanceType = cuvsDistanceType;
-    this.isDynamicBuildAlgo = isDynamicBuildAlgo;
+    this.useDynamicBuildAlgo = useDynamicBuildAlgo;
   }
 
   /**
@@ -231,7 +231,7 @@ public class AcceleratedHNSWParams {
    * @return
    */
   public boolean isUseDynamicBuildAlgo() {
-    return isDynamicBuildAlgo;
+    return useDynamicBuildAlgo;
   }
 
   @Override
@@ -261,7 +261,7 @@ public class AcceleratedHNSWParams {
         + ", cuvsDistanceType="
         + cuvsDistanceType
         + ", isDynamicBuildAlgo="
-        + isDynamicBuildAlgo
+        + useDynamicBuildAlgo
         + "]";
   }
 
@@ -282,7 +282,7 @@ public class AcceleratedHNSWParams {
     private ExecutorService mergeExec = null;
     private HnswHeuristicType heuristicType = DEFAULT_HEURISTIC_TYPE;
     private CuvsDistanceType cuvsDistanceType = DEFAULT_CUVS_DISTANCE_TYPE;
-    private boolean useDynamicBuildAlgo = DEFAULT_IS_DYNAMIC_BUILD_ALGO;
+    private boolean useDynamicBuildAlgo = DEFAULT_USE_DYNAMIC_BUILD_ALGO;
 
     /**
      * Set the number of cuVS writer threads while building the index
@@ -430,7 +430,8 @@ public class AcceleratedHNSWParams {
     }
 
     /**
-     * Set if we should use dynamic algo selection based on the data shape
+     * Set if we should use dynamic algorithm selection based on the data shape
+     * Please set this flag to false to be able to use custom parameters.
      *
      * @param useDynamicBuildAlgo
      * @return instance of {@link Builder}
