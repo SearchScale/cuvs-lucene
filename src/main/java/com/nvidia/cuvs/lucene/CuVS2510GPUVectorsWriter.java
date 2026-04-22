@@ -241,6 +241,7 @@ public class CuVS2510GPUVectorsWriter extends KnnVectorsWriter {
    * @throws Throwable
    */
   private void writeCagraIndex(OutputStream os, CuVSMatrix dataset) throws Throwable {
+    System.out.println("%%%%%%%%%%%%%%%%%%%%%%%%% writeCagraIndex");
     CagraIndexParams params =
         new CagraIndexParams.Builder()
             .withNumWriterThreads(gpuSearchParams.getWriterThreads())
@@ -249,13 +250,20 @@ public class CuVS2510GPUVectorsWriter extends KnnVectorsWriter {
             .withCagraGraphBuildAlgo(gpuSearchParams.getCagraGraphBuildAlgo())
             .withCuVSIvfPqParams(gpuSearchParams.getCuVSIvfPqParams())
             .build();
+    long st = System.currentTimeMillis();
     CagraIndex index =
         CagraIndex.newBuilder(getCuVSResourcesInstance())
             .withDataset(dataset)
             .withIndexParams(params)
             .build();
-    index.serialize(os);
+    long et = System.currentTimeMillis() - st;
+    System.out.println(">>>>>> Time to build cagra index: " + et);
+    st = System.currentTimeMillis();
+    index.serialize(os, 8192);
+    et = System.currentTimeMillis() - st;
+    System.out.println(">>>>>> Time to serialize cagra index: " + et);
     index.close();
+    System.out.println("%%%%%%%%%%%%%%%%%%%%%%%%% writeCagraIndex close");
   }
 
   /**
@@ -284,6 +292,7 @@ public class CuVS2510GPUVectorsWriter extends KnnVectorsWriter {
    */
   @Override
   public void flush(int maxDoc, DocMap sortMap) throws IOException {
+    System.out.println(">>>>>>>>>>>>>>>>> FLUSH ......................................");
     flatVectorsWriter.flush(maxDoc, sortMap);
     for (var field : fields) {
       if (sortMap == null) {
@@ -498,6 +507,7 @@ public class CuVS2510GPUVectorsWriter extends KnnVectorsWriter {
    */
   @Override
   public void mergeOneField(FieldInfo fieldInfo, MergeState mergeState) throws IOException {
+    System.out.println(">>>>>>>>>>>>>>>>> MERGE ONE FIELD ......................................");
     flatVectorsWriter.mergeOneField(fieldInfo, mergeState);
     vectorBasedMerge(fieldInfo, mergeState);
   }

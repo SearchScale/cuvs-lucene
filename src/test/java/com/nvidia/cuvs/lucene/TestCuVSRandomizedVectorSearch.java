@@ -116,19 +116,25 @@ public class TestCuVSRandomizedVectorSearch extends LuceneTestCase {
 
     if (dataset.length < topK) topK = dataset.length;
 
-    float[][] queries = generateQueries(random, dataset[0].length, numQueries);
+    float[][] queries = generateQueries(random, dataset[0].length, 5);
     List<List<Integer>> expected = generateExpectedResults(topK, dataset, queries);
 
     log.log(Level.FINE, "Dataset size: " + dataset.length + "x" + dataset[0].length);
     log.log(Level.FINE, "Query size: " + numQueries + "x" + queries[0].length);
     log.log(Level.FINE, "TopK: " + topK);
 
-    GPUKnnFloatVectorQuery query =
-        new GPUKnnFloatVectorQuery("vector", queries[0], topK, null, topK, 1);
+    GPUKnnBatchedFloatVectorQuery query =
+        new GPUKnnBatchedFloatVectorQuery("vector", queries, topK, null, topK, 1);
+
     int correct[] = new int[topK];
     for (int i = 0; i < topK; i++) correct[i] = expected.get(0).get(i);
 
-    ScoreDoc[] hits = searcher.search(query, topK).scoreDocs;
+    long st = System.currentTimeMillis();
+    GPUTopScoreBatchCollectorManager manager = new GPUTopScoreBatchCollectorManager(topK, 1000);
+    ScoreDoc[] hits = searcher.search(query, manager).scoreDocs;
+    long ed = System.currentTimeMillis();
+    System.out.println("$$$$$$$$$$$$$$$$$$$$$$$$$$ TOTAL SEARCH TIME: " + (ed - st));
+
     log.log(Level.FINE, "RESULTS: " + Arrays.toString(hits));
     log.log(Level.FINE, "EXPECTD: " + expected.get(0));
 

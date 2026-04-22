@@ -20,6 +20,7 @@ import com.nvidia.cuvs.CagraQuery;
 import com.nvidia.cuvs.CagraSearchParams;
 import com.nvidia.cuvs.CuVSMatrix;
 import java.io.IOException;
+import java.util.Arrays;
 import java.util.BitSet;
 import java.util.Iterator;
 import java.util.List;
@@ -398,6 +399,7 @@ public class CuVS2510GPUVectorsReader extends KnnVectorsReader {
   @Override
   public void search(String field, float[] target, KnnCollector knnCollector, Bits acceptDocs)
       throws IOException {
+    // new RuntimeException().printStackTrace();
     var fieldEntry = getFieldEntry(field, VectorEncoding.FLOAT32);
     if (fieldEntry.count() == 0 || knnCollector.k() == 0) {
       return;
@@ -437,6 +439,7 @@ public class CuVS2510GPUVectorsReader extends KnnVectorsReader {
       List<Map<Integer, Float>> searchResult = null;
       if (knnCollector.k() <= 1024 && cuvsIndex.getCagraIndex() != null) {
         CagraSearchParams searchParams;
+        CuVSMatrix queryVector = null;
         if (knnCollector instanceof GPUPerLeafCuVSKnnCollector) {
           GPUPerLeafCuVSKnnCollector collector = (GPUPerLeafCuVSKnnCollector) knnCollector;
           searchParams =
@@ -444,19 +447,45 @@ public class CuVS2510GPUVectorsReader extends KnnVectorsReader {
                   .withItopkSize(Math.max(collector.getiTopK(), topK))
                   .withSearchWidth(collector.getSearchWidth())
                   .build();
+          CuVSMatrix.Builder<?> builder =
+              CuVSMatrix.deviceBuilder(
+                  getCuVSResourcesInstance(), 1, target.length, CuVSMatrix.DataType.FLOAT);
+          builder.addVector(target);
+          queryVector = builder.build();
+        } else if (knnCollector instanceof GPUPerLeafBatchCuVSKnnCollector) {
+          GPUPerLeafBatchCuVSKnnCollector collector =
+              (GPUPerLeafBatchCuVSKnnCollector) knnCollector;
+          searchParams =
+              new CagraSearchParams.Builder()
+                  .withItopkSize(Math.max(collector.getiTopK(), topK))
+                  .withSearchWidth(collector.getSearchWidth())
+                  .build();
+
+          int qvd = collector.getQueryVectorDimension();
+          int nmq = collector.getNumQueries();
+          System.out.println(">>>>>>>>>>>>> NMQ: " + nmq + " QVD: " + qvd);
+          CuVSMatrix.Builder<?> builder =
+              CuVSMatrix.deviceBuilder(
+                  getCuVSResourcesInstance(), nmq, qvd, CuVSMatrix.DataType.FLOAT);
+
+          for (int i = 0; i < nmq; i++) {
+            int sp = (i == 0 ? 0 : (i * qvd - 1));
+            builder.addVector(Arrays.copyOfRange(target, sp, sp + qvd));
+          }
+
+          queryVector = builder.build();
         } else {
           // Setting itopK as topK because in any case iTopK should be ATLEAST equal to topK
           searchParams = new CagraSearchParams.Builder().withItopkSize(topK).build();
+          CuVSMatrix.Builder<?> builder =
+              CuVSMatrix.deviceBuilder(
+                  getCuVSResourcesInstance(), 1, target.length, CuVSMatrix.DataType.FLOAT);
+          builder.addVector(target);
+          queryVector = builder.build();
         }
         CagraIndex cagraIndex = cuvsIndex.getCagraIndex();
         assert cagraIndex != null;
         CagraQuery query = null;
-
-        CuVSMatrix.Builder<?> builder =
-            CuVSMatrix.deviceBuilder(
-                getCuVSResourcesInstance(), 1, target.length, CuVSMatrix.DataType.FLOAT);
-        builder.addVector(target);
-        CuVSMatrix queryVector = builder.build();
 
         if (acceptDocs != null) {
           query =
@@ -497,25 +526,43 @@ public class CuVS2510GPUVectorsReader extends KnnVectorsReader {
         searchResult = bruteforceIndex.search(query).getResults();
       }
 
-      // List expected to have only one entry because of single query "target".
-      assert searchResult.size() == 1;
       final IntToIntFunction ordToDocFunction = (IntToIntFunction) rawValues::ordToDoc;
       final FloatToFloatFunction scoreCorrectionFunction =
           getScoreNormalizationFunc(fieldEntry.similarityFunction);
 
-      for (Entry<Integer, Float> entry : searchResult.getFirst().entrySet()) {
-        int ord = entry.getKey();
-        float score = entry.getValue();
-        if (knnCollector.earlyTerminated()) {
-          break;
+      if (searchResult.size() == 1) {
+        for (Entry<Integer, Float> entry : searchResult.getFirst().entrySet()) {
+          int ord = entry.getKey();
+          float score = entry.getValue();
+          if (knnCollector.earlyTerminated()) {
+            break;
+          }
+          if (ord < 0) {
+            continue;
+          }
+          float correctedScore = scoreCorrectionFunction.apply(score);
+          int doc = ordToDocFunction.apply(ord);
+          knnCollector.incVisitedCount(1);
+          knnCollector.collect(doc, correctedScore);
         }
-        if (ord < 0) {
-          continue;
+      } else {
+        GPUPerLeafBatchCuVSKnnCollector collector = (GPUPerLeafBatchCuVSKnnCollector) knnCollector;
+        for (int q = 0; q < searchResult.size(); q++) {
+          for (Entry<Integer, Float> entry : searchResult.get(q).entrySet()) {
+            int ord = entry.getKey();
+            float score = entry.getValue();
+            if (collector.getCollectors().get(q).earlyTerminated()) {
+              break;
+            }
+            if (ord < 0) {
+              continue;
+            }
+            float correctedScore = scoreCorrectionFunction.apply(score);
+            int doc = ordToDocFunction.apply(ord);
+            collector.getCollectors().get(q).incVisitedCount(1);
+            collector.getCollectors().get(q).collect(doc, correctedScore);
+          }
         }
-        float correctedScore = scoreCorrectionFunction.apply(score);
-        int doc = ordToDocFunction.apply(ord);
-        knnCollector.incVisitedCount(1);
-        knnCollector.collect(doc, correctedScore);
       }
     } catch (Throwable t) {
       Utils.handleThrowable(t);

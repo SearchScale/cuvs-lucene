@@ -209,6 +209,7 @@ public class Lucene99AcceleratedHNSWVectorsWriter extends KnnVectorsWriter {
    */
   @Override
   public void flush(int maxDoc, DocMap sortMap) throws IOException {
+    System.out.println(">>>>>>>>>>>>>>>>> FLUSH ......................................");
     flatVectorsWriter.flush(maxDoc, sortMap);
     for (var field : fields) {
       if (sortMap == null) {
@@ -298,6 +299,7 @@ public class Lucene99AcceleratedHNSWVectorsWriter extends KnnVectorsWriter {
    */
   @Override
   public void mergeOneField(FieldInfo fieldInfo, MergeState mergeState) throws IOException {
+    System.out.println(">>>>>>>>>>>>>>>>> MERGE ONE FIELD ......................................");
     flatVectorsWriter.mergeOneField(fieldInfo, mergeState);
     vectorBasedMerge(fieldInfo, mergeState);
   }
