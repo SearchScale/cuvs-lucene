@@ -1,9 +1,9 @@
 package com.nvidia.cuvs.lucene;
 
 import com.nvidia.cuvs.CuVSResources;
-import com.nvidia.cuvs.CuVSResourcesInfo;
 import com.nvidia.cuvs.GPUInfoProvider;
 import com.nvidia.cuvs.spi.CuVSProvider;
+import java.util.concurrent.atomic.AtomicLong;
 import java.util.concurrent.locks.Condition;
 import java.util.concurrent.locks.ReentrantLock;
 import java.util.logging.Level;
@@ -19,36 +19,53 @@ public class CuvsResourcesManager {
   private ManagedCuVSResources[] pool;
   private ReentrantLock lock;
   private Condition resourcesAvailable;
+  private AtomicLong reserveMemory;
+  private long totalDeviceMemory;
 
   public CuvsResourcesManager() {
-    log.log(Level.INFO, "Initializing CuvsResourcesManager");
+    log.log(Level.INFO, "Initializing CuvsResourcesManager " + Thread.currentThread().getName());
     pool = new ManagedCuVSResources[RESOURCES_POOL_SIZE];
     lock = new ReentrantLock();
     resourcesAvailable = lock.newCondition();
     for (int i = 0; i < RESOURCES_POOL_SIZE; i++) {
       pool[i] = new ManagedCuVSResources(getCuVSResourceInstance());
     }
+    CuVSResources rx = getCuVSResourceInstance();
+    reserveMemory = new AtomicLong();
+    totalDeviceMemory = GPU_INFO_PROVIDER.getCurrentInfo(rx).totalDeviceMemoryInBytes();
+    rx.close();
   }
 
   private ManagedCuVSResources getAvailableResourcesFromPool() {
-    log.log(Level.INFO, "getAvailableResourcesFromPool");
-    for (int i = 0; i < RESOURCES_POOL_SIZE; i++) {
-      if (pool[i] != null && !pool[i].isLocked()) {
-        return pool[i];
+    try {
+      lock.lock();
+      log.log(Level.INFO, "getAvailableResourcesFromPool ");
+      for (int i = 0; i < RESOURCES_POOL_SIZE; i++) {
+        if (pool[i] != null && !pool[i].isLocked()) {
+          log.log(Level.INFO, "returning resource id: " + i);
+          return pool[i];
+        }
       }
+    } finally {
+      lock.unlock();
     }
     return null;
   }
 
   private int getNumLockedResources() {
-    log.log(Level.INFO, "getNumLockedResources");
-    int res = 0;
-    for (int i = 0; i < RESOURCES_POOL_SIZE; i++) {
-      if (pool[i].isLocked()) {
-        res += 1;
+    try {
+      lock.lock();
+      log.log(Level.INFO, "getNumLockedResources");
+      int res = 0;
+      for (int i = 0; i < RESOURCES_POOL_SIZE; i++) {
+        if (pool[i].isLocked()) {
+          res += 1;
+        }
       }
+      return res;
+    } finally {
+      lock.unlock();
     }
-    return res;
   }
 
   public ManagedCuVSResources acquireResource(long rows, long dimension)
@@ -56,27 +73,23 @@ public class CuvsResourcesManager {
     log.log(Level.INFO, "acquireResource");
     try {
       lock.lock();
-
-      if (getNumLockedResources() == RESOURCES_POOL_SIZE) {
-        resourcesAvailable.await();
-      }
-
-      ManagedCuVSResources res = getAvailableResourcesFromPool();
-      assert res != null;
-
-      CuVSResourcesInfo info = GPU_INFO_PROVIDER.getCurrentInfo(res.getResource());
-      long totalMem = info.totalDeviceMemoryInBytes();
-      long freeMem = info.freeDeviceMemoryInBytes();
       long neededMem = getEstimatedMemoryRequirement(rows, dimension);
 
-      if (neededMem > totalMem) {
+      if (neededMem > totalDeviceMemory) {
         throw new RuntimeException("Not enough GPU device memory available");
       }
 
-      // Wait for enough device memory to become available
-      while (neededMem > freeMem) {
-        freeMem = info.freeDeviceMemoryInBytes();
+      long avm = totalDeviceMemory - reserveMemory.get();
+      while (getNumLockedResources() == RESOURCES_POOL_SIZE || avm < neededMem) {
+        avm = totalDeviceMemory - reserveMemory.get();
+        resourcesAvailable.await();
       }
+      reserveMemory.addAndGet(neededMem);
+
+      ManagedCuVSResources res = getAvailableResourcesFromPool();
+      assert res != null : "Should not be reaching here.";
+
+      res.setNeededMemory(neededMem);
       res.lock();
       return res;
 
@@ -89,6 +102,7 @@ public class CuvsResourcesManager {
     log.log(Level.INFO, "releaseResource");
     try {
       lock.lock();
+      reserveMemory.addAndGet(-resource.getNeededMemory());
       resource.unlock();
       resourcesAvailable.signalAll();
     } finally {
@@ -120,6 +134,7 @@ public class CuvsResourcesManager {
 
     private final CuVSResources resource;
     private final ReentrantLock lock;
+    private long neededMemory;
 
     public ManagedCuVSResources(CuVSResources resource) {
       this.resource = resource;
@@ -128,6 +143,14 @@ public class CuvsResourcesManager {
 
     public CuVSResources getResource() {
       return resource;
+    }
+
+    public long getNeededMemory() {
+      return neededMemory;
+    }
+
+    public void setNeededMemory(long neededMemory) {
+      this.neededMemory = neededMemory;
     }
 
     public void lock() {
