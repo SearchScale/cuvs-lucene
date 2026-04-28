@@ -160,17 +160,18 @@ public class Lucene99AcceleratedHNSWVectorsWriter extends KnnVectorsWriter {
       writeSingleVectorGraph(fieldInfo, vectors);
       return;
     }
-    ManagedCuVSResources resr = manager.acquireResource(vectors.size(), vectors.get(0).length);
+    CagraIndexParams params =
+        cagraIndexParams(
+            acceleratedHNSWParams.getWriterThreads(),
+            acceleratedHNSWParams.getIntermediateGraphDegree(),
+            acceleratedHNSWParams.getGraphdegree(),
+            acceleratedHNSWParams.getCagraGraphBuildAlgo(),
+            acceleratedHNSWParams.getCuVSIvfPqParams());
+    ManagedCuVSResources resr =
+        manager.acquireResource(vectors.size(), vectors.get(0).length, params);
     try {
       CuVSMatrix dataset =
           Utils.createFloatMatrix(vectors, fieldInfo.getVectorDimension(), resr.getResource());
-      CagraIndexParams params =
-          cagraIndexParams(
-              acceleratedHNSWParams.getWriterThreads(),
-              acceleratedHNSWParams.getIntermediateGraphDegree(),
-              acceleratedHNSWParams.getGraphdegree(),
-              acceleratedHNSWParams.getCagraGraphBuildAlgo(),
-              acceleratedHNSWParams.getCuVSIvfPqParams());
       CagraIndex cagraIndex =
           CagraIndex.newBuilder(resr.getResource())
               .withDataset(dataset)
@@ -225,6 +226,7 @@ public class Lucene99AcceleratedHNSWVectorsWriter extends KnnVectorsWriter {
           writeSortingField(field, sortMap);
         }
       } catch (Exception e) {
+        e.printStackTrace();
         throw new IOException(e.getMessage());
       }
     }

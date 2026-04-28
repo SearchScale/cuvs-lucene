@@ -1,5 +1,11 @@
 package com.nvidia.cuvs.lucene;
 
+import static com.nvidia.cuvs.CagraIndexParams.CagraGraphBuildAlgo.IVF_PQ;
+import static com.nvidia.cuvs.CagraIndexParams.CagraGraphBuildAlgo.NN_DESCENT;
+
+import com.nvidia.cuvs.CagraIndexParams;
+import com.nvidia.cuvs.CagraIndexParams.CagraGraphBuildAlgo;
+import com.nvidia.cuvs.CuVSIvfPqIndexParams;
 import com.nvidia.cuvs.CuVSResources;
 import com.nvidia.cuvs.GPUInfoProvider;
 import com.nvidia.cuvs.spi.CuVSProvider;
@@ -23,7 +29,6 @@ public class CuvsResourcesManager {
   private long totalDeviceMemory;
 
   public CuvsResourcesManager() {
-    log.log(Level.INFO, "Initializing CuvsResourcesManager " + Thread.currentThread().getName());
     pool = new ManagedCuVSResources[RESOURCES_POOL_SIZE];
     lock = new ReentrantLock();
     resourcesAvailable = lock.newCondition();
@@ -39,7 +44,6 @@ public class CuvsResourcesManager {
   private ManagedCuVSResources getAvailableResourcesFromPool() {
     try {
       lock.lock();
-      log.log(Level.INFO, "getAvailableResourcesFromPool ");
       for (int i = 0; i < RESOURCES_POOL_SIZE; i++) {
         if (pool[i] != null && !pool[i].isLocked()) {
           log.log(Level.INFO, "returning resource id: " + i);
@@ -55,7 +59,6 @@ public class CuvsResourcesManager {
   private int getNumLockedResources() {
     try {
       lock.lock();
-      log.log(Level.INFO, "getNumLockedResources");
       int res = 0;
       for (int i = 0; i < RESOURCES_POOL_SIZE; i++) {
         if (pool[i].isLocked()) {
@@ -68,43 +71,52 @@ public class CuvsResourcesManager {
     }
   }
 
-  public ManagedCuVSResources acquireResource(long rows, long dimension)
+  public ManagedCuVSResources acquireResource(long rows, long dimension, CagraIndexParams params)
       throws InterruptedException {
-    log.log(Level.INFO, "acquireResource");
     try {
       lock.lock();
-      long neededMem = getEstimatedMemoryRequirement(rows, dimension);
+      long neededMem = getEstimatedMemoryRequirement(rows, dimension, params);
 
       if (neededMem > totalDeviceMemory) {
         throw new RuntimeException("Not enough GPU device memory available");
       }
 
-      long avm = totalDeviceMemory - reserveMemory.get();
-      while (getNumLockedResources() == RESOURCES_POOL_SIZE || avm < neededMem) {
-        avm = totalDeviceMemory - reserveMemory.get();
+      while (getNumLockedResources() == RESOURCES_POOL_SIZE
+          || (totalDeviceMemory - reserveMemory.get()) < neededMem) {
         resourcesAvailable.await();
       }
       reserveMemory.addAndGet(neededMem);
 
       ManagedCuVSResources res = getAvailableResourcesFromPool();
-      assert res != null : "Should not be reaching here.";
+      assert res != null;
 
       res.setNeededMemory(neededMem);
       res.lock();
       return res;
-
     } finally {
       lock.unlock();
     }
   }
 
   public void releaseResource(ManagedCuVSResources resource) {
-    log.log(Level.INFO, "releaseResource");
     try {
       lock.lock();
       reserveMemory.addAndGet(-resource.getNeededMemory());
       resource.unlock();
       resourcesAvailable.signalAll();
+    } finally {
+      lock.unlock();
+    }
+  }
+
+  public void shutdown() {
+    try {
+      lock.lock();
+      for (int i = 0; i < RESOURCES_POOL_SIZE; i++) {
+        if (pool[i] != null && !pool[i].isLocked() && pool[i].getResource() != null) {
+          pool[i].getResource().close();
+        }
+      }
     } finally {
       lock.unlock();
     }
@@ -126,8 +138,20 @@ public class CuvsResourcesManager {
     return null;
   }
 
-  private long getEstimatedMemoryRequirement(long rows, long dimension) {
-    return 2 * rows * dimension * Float.BYTES;
+  private long getEstimatedMemoryRequirement(long rows, long dimension, CagraIndexParams params) {
+    CagraGraphBuildAlgo buildAlgo = params.getCagraGraphBuildAlgo();
+    if (buildAlgo.equals(NN_DESCENT)) {
+      return 2 * rows * dimension * Float.BYTES;
+    } else if (buildAlgo.equals(IVF_PQ)) {
+      CuVSIvfPqIndexParams ip = params.getCuVSIvfPqParams().getIndexParams();
+      long approximatedIvfBytes =
+          (long)
+              (rows * (ip.getPqDim() * (ip.getPqBits() / 8.0) + Float.BYTES)
+                  + (long) ip.getnLists() * Integer.BYTES);
+      return 2 * approximatedIvfBytes;
+    } else {
+      throw new IllegalArgumentException("Unsupported CAGRA build algo");
+    }
   }
 
   class ManagedCuVSResources {
