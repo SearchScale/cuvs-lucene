@@ -160,14 +160,15 @@ public class Lucene99AcceleratedHNSWVectorsWriter extends KnnVectorsWriter {
     }
 
     CagraIndexParams params =
-        CagraIndexParamsFactory.create(acceleratedHNSWParams, dataset.size(), dataset.columns());
+        CagraIndexParamsFactory.create(
+            acceleratedHNSWParams, vectors.size(), vectors.get(0).length);
     ManagedCuVSResources managedCuVSResources =
         cuvsResourcesManager.acquireResource(vectors.size(), vectors.get(0).length, params);
 
     try {
       CuVSMatrix dataset =
           Utils.createFloatMatrix(
-              vectors, fieldInfo.getVectorDimension(), getCuVSResourcesInstance());
+              vectors, fieldInfo.getVectorDimension(), managedCuVSResources.getResource());
 
       CagraIndex cagraIndex =
           CagraIndex.newBuilder(managedCuVSResources.getResource())

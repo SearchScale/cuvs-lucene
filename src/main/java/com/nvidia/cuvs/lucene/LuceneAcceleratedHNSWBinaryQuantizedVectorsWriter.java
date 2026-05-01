@@ -155,7 +155,8 @@ public class LuceneAcceleratedHNSWBinaryQuantizedVectorsWriter extends KnnVector
     }
 
     CagraIndexParams params =
-        CagraIndexParamsFactory.create(acceleratedHNSWParams, dataset.size(), dataset.columns());
+        CagraIndexParamsFactory.create(
+            acceleratedHNSWParams, vectors.size(), vectors.get(0).length);
     ManagedCuVSResources managedCuVSResources =
         cuvsResourcesManager.acquireResource(vectors.size(), vectors.get(0).length, params);
 
