@@ -5,11 +5,11 @@
 package com.nvidia.cuvs.lucene;
 
 import com.nvidia.cuvs.LibraryException;
-import java.util.logging.Level;
-import java.util.logging.Logger;
 import org.apache.lucene.codecs.Codec;
 import org.apache.lucene.codecs.FilterCodec;
 import org.apache.lucene.codecs.KnnVectorsFormat;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 /**
  * cuVS based codec for GPU based vector search that enables both - indexing and search on the GPU.
@@ -19,7 +19,7 @@ import org.apache.lucene.codecs.KnnVectorsFormat;
  */
 public class CuVS2510GPUSearchCodec extends FilterCodec {
 
-  private static final Logger log = Logger.getLogger(CuVS2510GPUSearchCodec.class.getName());
+  private static final Logger LOG = LoggerFactory.getLogger(CuVS2510GPUSearchCodec.class);
   private static final String NAME = "CuVS2510GPUSearchCodec";
   private KnnVectorsFormat format;
 
@@ -67,9 +67,7 @@ public class CuVS2510GPUSearchCodec extends FilterCodec {
       format = new CuVS2510GPUVectorsFormat(params);
       setKnnFormat(format);
     } catch (LibraryException ex) {
-      log.log(
-          Level.SEVERE,
-          "Couldn't load native library, possible classloader issue. " + ex.getMessage());
+      LOG.warn("Couldn't load native library, possible classloader issue. {}", ex.getMessage());
     }
   }
 

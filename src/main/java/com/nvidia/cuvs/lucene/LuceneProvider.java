@@ -9,8 +9,6 @@ import java.lang.invoke.VarHandle;
 import java.lang.reflect.Constructor;
 import java.lang.reflect.InvocationTargetException;
 import java.util.List;
-import java.util.logging.Level;
-import java.util.logging.Logger;
 import org.apache.lucene.codecs.Codec;
 import org.apache.lucene.codecs.KnnVectorsReader;
 import org.apache.lucene.codecs.KnnVectorsWriter;
@@ -22,6 +20,8 @@ import org.apache.lucene.index.SegmentReadState;
 import org.apache.lucene.index.SegmentWriteState;
 import org.apache.lucene.index.VectorSimilarityFunction;
 import org.apache.lucene.search.TaskExecutor;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 /**
  * Dynamically loads Lucene format, reader, and writer classes with a fallback mechanism.
@@ -30,8 +30,7 @@ import org.apache.lucene.search.TaskExecutor;
  */
 public class LuceneProvider {
 
-  static final Logger log = Logger.getLogger(LuceneProvider.class.getName());
-
+  private static final Logger LOG = LoggerFactory.getLogger(LuceneProvider.class);
   private static final String BASE = "org.apache.lucene.";
   private static String codecs = "codecs.lucene<version>.";
   private static String fallbackCodecs = "backward_codecs.lucene<version>.";
@@ -153,7 +152,7 @@ public class LuceneProvider {
         return Class.forName(fallbackClassName);
       } catch (ClassNotFoundException e1) {
         // Should not reach here.
-        log.log(Level.SEVERE, "Unable to load class: " + fallbackClassName);
+        LOG.error("Unable to load class: {}", fallbackClassName);
         throw e1;
       }
     }
@@ -180,7 +179,7 @@ public class LuceneProvider {
           flatVectorsFormat.getConstructor(FlatVectorsScorer.class);
       return (FlatVectorsFormat) luceneFlatVectorsFormatConstructor.newInstance(scorer);
     } catch (Exception e) {
-      log.log(Level.SEVERE, "Unable to initialize LuceneFlatVectorsFormat: " + e.getMessage());
+      LOG.error("Unable to initialize LuceneFlatVectorsFormat: {}", e.getMessage());
       throw e;
     }
   }
@@ -192,7 +191,7 @@ public class LuceneProvider {
           hnswVectorsReader.getConstructor(SegmentReadState.class, FlatVectorsReader.class);
       return (KnnVectorsReader) luceneHnswVectorsReaderConstructor.newInstance(state, reader);
     } catch (Exception e) {
-      log.log(Level.SEVERE, "Unable to initialize LuceneHnswVectorsReader: " + e.getMessage());
+      LOG.error("Unable to initialize LuceneHnswVectorsReader: " + e.getMessage());
       throw e;
     }
   }
@@ -218,7 +217,7 @@ public class LuceneProvider {
           luceneHnswVectorsWriterConstructor.newInstance(
               state, maxConn, beamWidth, writer, numMergeWorkers, executor);
     } catch (Exception e) {
-      log.log(Level.SEVERE, "Unable to initialize LuceneHnswVectorsWriter: " + e.getMessage());
+      LOG.error("Unable to initialize LuceneHnswVectorsWriter: {}", e.getMessage());
       throw e;
     }
   }
@@ -228,7 +227,7 @@ public class LuceneProvider {
       VarHandle varHandle = lookup.findStaticVarHandle(hnswVectorsFormat, param, Integer.TYPE);
       return (int) varHandle.get();
     } catch (NoSuchFieldException | IllegalAccessException e) {
-      log.log(Level.SEVERE, "Unable to get " + param + ": " + e.getMessage());
+      LOG.error("Unable to get {} : {}", param, e.getMessage());
       throw e;
     }
   }
@@ -240,7 +239,7 @@ public class LuceneProvider {
           lookup.findStaticVarHandle(hnswVectorsReader, "SIMILARITY_FUNCTIONS", List.class);
       return (List<VectorSimilarityFunction>) varHandle.get();
     } catch (NoSuchFieldException | IllegalAccessException e) {
-      log.log(Level.SEVERE, "Unable to get SIMILARITY_FUNCTIONS: " + e.getMessage());
+      LOG.error("Unable to get SIMILARITY_FUNCTIONS: {}", e.getMessage());
       throw e;
     }
   }
@@ -251,9 +250,7 @@ public class LuceneProvider {
           binaryQuantizedVectorsFormat.getConstructor();
       return (FlatVectorsFormat) luceneBinaryQuantizedVectorsFormatConstructor.newInstance();
     } catch (Exception e) {
-      log.log(
-          Level.SEVERE,
-          "Unable to initialize LuceneBinaryQuantizedVectorsFormat: " + e.getMessage());
+      LOG.error("Unable to initialize LuceneBinaryQuantizedVectorsFormat: {}", e.getMessage());
       throw e;
     }
   }
@@ -266,9 +263,7 @@ public class LuceneProvider {
       return (FlatVectorsFormat)
           luceneHnswBinaryQuantizedVectorsFormatConstructor.newInstance(maxConn, beamWidth);
     } catch (Exception e) {
-      log.log(
-          Level.SEVERE,
-          "Unable to initialize LuceneBinaryQuantizedVectorsFormat: " + e.getMessage());
+      LOG.error("Unable to initialize LuceneBinaryQuantizedVectorsFormat: {}", e.getMessage());
       throw e;
     }
   }
@@ -279,9 +274,7 @@ public class LuceneProvider {
           scalarQuantizedVectorsFormat.getConstructor();
       return (FlatVectorsFormat) luceneScalarQuantizedVectorsFormatConstructor.newInstance();
     } catch (Exception e) {
-      log.log(
-          Level.SEVERE,
-          "Unable to initialize LuceneScalarQuantizedVectorsFormat: " + e.getMessage());
+      LOG.error("Unable to initialize LuceneScalarQuantizedVectorsFormat: {}", e.getMessage());
       throw e;
     }
   }
@@ -294,9 +287,7 @@ public class LuceneProvider {
       return (FlatVectorsFormat)
           luceneHnswScalarQuantizedVectorsFormatConstructor.newInstance(beamWidth, maxConn);
     } catch (Exception e) {
-      log.log(
-          Level.SEVERE,
-          "Unable to initialize LuceneHnswScalarQuantizedVectorsFormat: " + e.getMessage());
+      LOG.error("Unable to initialize LuceneHnswScalarQuantizedVectorsFormat: {}", e.getMessage());
       throw e;
     }
   }

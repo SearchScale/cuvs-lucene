@@ -18,8 +18,6 @@ import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.atomic.AtomicInteger;
-import java.util.logging.Level;
-import java.util.logging.Logger;
 import org.apache.lucene.codecs.Codec;
 import org.apache.lucene.document.Document;
 import org.apache.lucene.document.Field;
@@ -39,12 +37,13 @@ import org.apache.lucene.tests.util.TestUtil;
 import org.junit.AfterClass;
 import org.junit.BeforeClass;
 import org.junit.Test;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 @SuppressSysoutChecks(bugUrl = "")
 public class TestMultithreadedCuVSGPUSearch extends LuceneTestCase {
 
-  private static final Logger log =
-      Logger.getLogger(TestMultithreadedCuVSGPUSearch.class.getName());
+  private static final Logger LOG = LoggerFactory.getLogger(TestMultithreadedCuVSGPUSearch.class);
   private static final Codec codec =
       TestUtil.alwaysKnnVectorsFormat(new CuVS2510GPUVectorsFormat());
   private static final String VECTOR_FIELD = "vectors";
@@ -67,16 +66,16 @@ public class TestMultithreadedCuVSGPUSearch extends LuceneTestCase {
     int datasetSize = random.nextInt(500, 2000);
     int dimensions = random.nextInt(64, 256);
     topK = random.nextInt(2, 30);
-    log.log(Level.FINE, "Using topK as: " + topK);
+    LOG.trace("Using topK as: {}", topK);
     numThreads = random.nextInt(2, 8);
-    log.log(Level.FINE, "Generating a dataset with " + datasetSize + " vectors");
+    LOG.trace("Generating a dataset with {} vectors", datasetSize);
     float[][] dataset = generateDataset(random, datasetSize, dimensions);
     numQueries = random.nextInt(100, 500);
-    log.log(Level.FINE, "Generating a query set with " + numQueries + " queries");
+    LOG.trace("Generating a query set with {} queries", numQueries);
     float[][] queryVectors = generateDataset(random, numQueries, dimensions);
     queries = new ArrayBlockingQueue<>(numQueries, true, Arrays.asList(queryVectors));
 
-    log.log(Level.FINE, "Indexing " + datasetSize + " vectors");
+    LOG.trace("Indexing {} vectors", datasetSize);
     for (int i = 0; i < datasetSize; i++) {
       Document doc = new Document();
       doc.add(new StringField("id", String.valueOf(i), Field.Store.YES));
@@ -95,7 +94,7 @@ public class TestMultithreadedCuVSGPUSearch extends LuceneTestCase {
     IndexSearcher searcher = new IndexSearcher(reader);
     CountDownLatch latch = new CountDownLatch(numThreads);
     AtomicInteger totalSuccessfulQueries = new AtomicInteger();
-    log.log(Level.FINE, "Using " + numThreads + " threads");
+    LOG.trace("Using {} threads", numThreads);
     for (int i = 0; i < numThreads; i++) {
       executorService.execute(
           new Runnable() {
@@ -104,8 +103,8 @@ public class TestMultithreadedCuVSGPUSearch extends LuceneTestCase {
                 float[] queryVector;
                 String threadName = Thread.currentThread().getName();
                 while ((queryVector = queries.poll()) != null) {
-                  log.log(Level.FINE, "Thread: " + threadName + ", queue size: " + queries.size());
-                  log.log(Level.FINER, "Query: " + Arrays.toString(queryVector));
+                  LOG.trace("Thread: {}, queue size: {}", threadName, queries.size());
+                  LOG.trace("Query: {}", Arrays.toString(queryVector));
                   GPUKnnFloatVectorQuery query =
                       new GPUKnnFloatVectorQuery(VECTOR_FIELD, queryVector, topK, null, topK, 1);
                   ScoreDoc[] hits = searcher.search(query, topK).scoreDocs;
@@ -123,9 +122,7 @@ public class TestMultithreadedCuVSGPUSearch extends LuceneTestCase {
     executorService.shutdown();
     executorService.close();
     reader.close();
-    log.log(
-        Level.FINE,
-        "Number queries that returned topK values: " + totalSuccessfulQueries.intValue());
+    LOG.trace("Number queries that returned topK values: {}", totalSuccessfulQueries.intValue());
     assertEquals(
         "All search queries did not return topK results",
         totalSuccessfulQueries.intValue(),
@@ -136,6 +133,6 @@ public class TestMultithreadedCuVSGPUSearch extends LuceneTestCase {
   public static void afterClass() throws IOException {
     if (directory != null) directory.close();
     directory = null;
-    log.log(Level.FINE, "Test finished");
+    LOG.trace("Test finished");
   }
 }

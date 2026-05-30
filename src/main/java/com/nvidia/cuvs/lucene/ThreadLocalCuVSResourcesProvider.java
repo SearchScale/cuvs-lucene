@@ -6,8 +6,8 @@
 package com.nvidia.cuvs.lucene;
 
 import com.nvidia.cuvs.CuVSResources;
-import java.util.logging.Level;
-import java.util.logging.Logger;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 /**
  * Provides a mechanism to create ThreadLocal based CuVSResource instances.
@@ -16,8 +16,7 @@ import java.util.logging.Logger;
  */
 public class ThreadLocalCuVSResourcesProvider {
 
-  private static final Logger log =
-      Logger.getLogger(ThreadLocalCuVSResourcesProvider.class.getName());
+  private static final Logger LOG = LoggerFactory.getLogger(ThreadLocalCuVSResourcesProvider.class);
   private static final ThreadLocal<CuVSResources> cuVSResources;
 
   static {
@@ -46,14 +45,12 @@ public class ThreadLocalCuVSResourcesProvider {
     try {
       return CuVSResources.create();
     } catch (UnsupportedOperationException uoe) {
-      log.log(
-          Level.WARNING,
-          "cuVS is not supported on this platform or java version: " + uoe.getMessage());
+      LOG.warn("cuVS is not supported on this platform or java version: {}", uoe.getMessage());
     } catch (Throwable t) {
       if (t instanceof ExceptionInInitializerError ex) {
         t = ex.getCause();
       }
-      log.log(Level.WARNING, "Exception occurred during creation of cuVS resources. " + t);
+      LOG.warn("Exception occurred during creation of cuVS resources. {}", t);
     }
     return null;
   }

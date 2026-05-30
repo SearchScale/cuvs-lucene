@@ -15,8 +15,6 @@ import java.util.Arrays;
 import java.util.HashSet;
 import java.util.Random;
 import java.util.UUID;
-import java.util.logging.Level;
-import java.util.logging.Logger;
 import org.apache.commons.io.FileUtils;
 import org.apache.lucene.codecs.Codec;
 import org.apache.lucene.document.Document;
@@ -40,12 +38,14 @@ import org.apache.lucene.tests.util.LuceneTestCase.SuppressSysoutChecks;
 import org.junit.After;
 import org.junit.Before;
 import org.junit.Test;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 @SuppressSysoutChecks(bugUrl = "")
 public class TestCagraToHnswSerializationAndSearch extends LuceneTestCase {
 
-  private static Logger log =
-      Logger.getLogger(TestCagraToHnswSerializationAndSearch.class.getName());
+  private static final Logger LOG =
+      LoggerFactory.getLogger(TestCagraToHnswSerializationAndSearch.class);
   private static Random random;
   private static Path indexDirPath;
 
@@ -92,15 +92,14 @@ public class TestCagraToHnswSerializationAndSearch extends LuceneTestCase {
     // Searching
     try (Directory indexDirectory = FSDirectory.open(indexDirPath);
         DirectoryReader reader = DirectoryReader.open(indexDirectory)) {
-      log.log(Level.FINE, "Successfully opened index");
+      LOG.trace("Successfully opened index");
 
       int vectorCount = 0;
       for (LeafReaderContext leafReaderContext : reader.leaves()) {
         LeafReader leafReader = leafReaderContext.reader();
         FloatVectorValues knnValues = leafReader.getFloatVectorValues(VECTOR_FIELD);
         assertNotNull(knnValues);
-        log.log(
-            Level.FINE,
+        LOG.trace(
             VECTOR_FIELD
                 + " field: "
                 + knnValues.size()
@@ -112,16 +111,16 @@ public class TestCagraToHnswSerializationAndSearch extends LuceneTestCase {
       }
       assertTrue("Dataset size mismatch", vectorCount == numDocs);
 
-      log.log(Level.FINE, "Testing vector search queries...");
+      LOG.trace("Testing vector search queries...");
       IndexSearcher searcher = new IndexSearcher(reader);
 
       float[] queryVector = generateDataset(random, 1, dimension)[0];
-      log.log(Level.FINE, "Query vector: " + Arrays.toString(queryVector));
+      LOG.trace("Query vector: {}", Arrays.toString(queryVector));
 
       KnnFloatVectorQuery query = new KnnFloatVectorQuery(VECTOR_FIELD, queryVector, topK);
       TopDocs results = searcher.search(query, topK);
 
-      log.log(Level.FINE, "Search results (" + results.totalHits + " total hits):");
+      LOG.trace("Search results ({} total hits):", results.totalHits);
       Integer[] expected = new Integer[] {1869, 1803, 1302, 59, 1497, 108, 1411, 351, 1982};
       HashSet<Integer> expectedIds = new HashSet<Integer>(Arrays.asList(expected));
 
@@ -129,16 +128,7 @@ public class TestCagraToHnswSerializationAndSearch extends LuceneTestCase {
         ScoreDoc scoreDoc = results.scoreDocs[i];
         Document doc = searcher.storedFields().document(scoreDoc.doc);
         String id = doc.get(ID_FIELD);
-        log.log(
-            Level.FINE,
-            "  Rank "
-                + (i + 1)
-                + ": doc "
-                + scoreDoc.doc
-                + " (id="
-                + id
-                + "), score="
-                + scoreDoc.score);
+        LOG.trace("Rank {}: doc {} (id={}), score={}", (i + 1), scoreDoc.doc, id, scoreDoc.score);
         assertTrue(
             "Id: " + id + " expected but not found", expectedIds.contains(Integer.valueOf(id)));
       }

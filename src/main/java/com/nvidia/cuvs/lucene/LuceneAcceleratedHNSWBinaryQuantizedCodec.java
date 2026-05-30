@@ -5,11 +5,11 @@
 package com.nvidia.cuvs.lucene;
 
 import com.nvidia.cuvs.LibraryException;
-import java.util.logging.Level;
-import java.util.logging.Logger;
 import org.apache.lucene.codecs.Codec;
 import org.apache.lucene.codecs.FilterCodec;
 import org.apache.lucene.codecs.KnnVectorsFormat;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 /**
  * CuVS based codec for GPU based vector search
@@ -18,8 +18,8 @@ import org.apache.lucene.codecs.KnnVectorsFormat;
  */
 public class LuceneAcceleratedHNSWBinaryQuantizedCodec extends FilterCodec {
 
-  private static final Logger log =
-      Logger.getLogger(LuceneAcceleratedHNSWBinaryQuantizedCodec.class.getName());
+  private static final Logger LOG =
+      LoggerFactory.getLogger(LuceneAcceleratedHNSWBinaryQuantizedCodec.class);
   private static final String NAME = "Lucene101AcceleratedHNSWBinaryQuantizedCodec";
 
   private KnnVectorsFormat format;
@@ -44,9 +44,7 @@ public class LuceneAcceleratedHNSWBinaryQuantizedCodec extends FilterCodec {
       format = new LuceneAcceleratedHNSWBinaryQuantizedVectorsFormat(acceleratedHNSWParams);
       setKnnFormat(format);
     } catch (LibraryException ex) {
-      log.log(
-          Level.SEVERE,
-          "Couldn't load native library, possible classloader issue. " + ex.getMessage());
+      LOG.error("Couldn't load native library, possible classloader issue. {}", ex.getMessage());
     }
   }
 

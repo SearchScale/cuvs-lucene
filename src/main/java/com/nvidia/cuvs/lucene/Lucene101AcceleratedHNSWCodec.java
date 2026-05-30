@@ -5,11 +5,11 @@
 package com.nvidia.cuvs.lucene;
 
 import com.nvidia.cuvs.LibraryException;
-import java.util.logging.Level;
-import java.util.logging.Logger;
 import org.apache.lucene.codecs.Codec;
 import org.apache.lucene.codecs.FilterCodec;
 import org.apache.lucene.codecs.KnnVectorsFormat;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 /**
  * A codec that enables GPU-based accelerated HNSW capability and can be used
@@ -20,7 +20,7 @@ import org.apache.lucene.codecs.KnnVectorsFormat;
  */
 public class Lucene101AcceleratedHNSWCodec extends FilterCodec {
 
-  private static final Logger log = Logger.getLogger(Lucene101AcceleratedHNSWCodec.class.getName());
+  private static final Logger LOG = LoggerFactory.getLogger(Lucene101AcceleratedHNSWCodec.class);
   private static final String NAME = "Lucene101AcceleratedHNSWCodec";
   private KnnVectorsFormat format;
 
@@ -74,9 +74,7 @@ public class Lucene101AcceleratedHNSWCodec extends FilterCodec {
       format = new Lucene99AcceleratedHNSWVectorsFormat(acceleratedHNSWParams);
       setKnnFormat(format);
     } catch (LibraryException ex) {
-      log.log(
-          Level.SEVERE,
-          "Couldn't load native library, possible classloader issue. " + ex.getMessage());
+      LOG.warn("Couldn't load native library, possible classloader issue. {}", ex.getMessage());
     }
   }
 

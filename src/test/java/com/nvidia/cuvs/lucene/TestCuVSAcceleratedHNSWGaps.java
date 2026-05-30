@@ -12,8 +12,6 @@ import java.util.List;
 import java.util.Map;
 import java.util.Random;
 import java.util.TreeMap;
-import java.util.logging.Level;
-import java.util.logging.Logger;
 import org.apache.lucene.codecs.Codec;
 import org.apache.lucene.document.Document;
 import org.apache.lucene.document.Field;
@@ -38,11 +36,13 @@ import org.apache.lucene.tests.util.TestUtil;
 import org.junit.AfterClass;
 import org.junit.BeforeClass;
 import org.junit.Test;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 @SuppressSysoutChecks(bugUrl = "")
 public class TestCuVSAcceleratedHNSWGaps extends LuceneTestCase {
 
-  protected static Logger log = Logger.getLogger(TestCuVSAcceleratedHNSWGaps.class.getName());
+  private static final Logger LOG = LoggerFactory.getLogger(TestCuVSAcceleratedHNSWGaps.class);
 
   static final Codec codec =
       TestUtil.alwaysKnnVectorsFormat(new Lucene99AcceleratedHNSWVectorsFormat());
@@ -75,7 +75,7 @@ public class TestCuVSAcceleratedHNSWGaps extends LuceneTestCase {
                 .setCodec(codec)
                 .setMergePolicy(newTieredMergePolicy()));
 
-    log.log(Level.FINE, "Merge Policy: " + writer.w.getConfig().getMergePolicy());
+    LOG.trace("Merge Policy: {}", writer.w.getConfig().getMergePolicy());
 
     datasetSize = random.nextInt(100, DATASET_SIZE_LIMIT);
     dimension = random.nextInt(8, DIMENSIONS_LIMIT);
@@ -107,7 +107,7 @@ public class TestCuVSAcceleratedHNSWGaps extends LuceneTestCase {
     searcher = null;
     reader = null;
     directory = null;
-    log.log(Level.FINE, "Test finished");
+    LOG.trace("Test finished");
   }
 
   @Test
@@ -129,7 +129,7 @@ public class TestCuVSAcceleratedHNSWGaps extends LuceneTestCase {
       String docId = reader.storedFields().document(hit.doc).get("id");
       int id = Integer.parseInt(docId);
       assertEquals("All results should be even-numbered (have vectors)", 0, id % 2);
-      log.log(Level.FINE, "Document ID: " + id + ", Score: " + hit.score);
+      LOG.trace("Document ID: {}, score: {}", id, hit.score);
     }
 
     // Verify the results match expected top-k based on Euclidean distance
@@ -140,7 +140,7 @@ public class TestCuVSAcceleratedHNSWGaps extends LuceneTestCase {
       assertTrue("Result " + id + " should be in expected top-k results", expectedIds.contains(id));
     }
 
-    log.log(Level.FINE, "Alternating document test passed with " + hits.length + " results");
+    LOG.trace("Alternating document test passed with {} results", hits.length);
   }
 
   @Test
@@ -164,9 +164,7 @@ public class TestCuVSAcceleratedHNSWGaps extends LuceneTestCase {
     String docId = reader.storedFields().document(filteredHits[0].doc).get("id");
     assertEquals("Should only return document 8", "8", docId);
 
-    log.log(
-        Level.FINE,
-        "Filtered alternating document test passed with " + filteredHits.length + " results");
+    LOG.trace("Filtered alternating document test passed with {} results", filteredHits.length);
   }
 
   public static List<Integer> calculateExpectedTopK(float[] query, int topK, float[][] dataset) {

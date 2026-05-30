@@ -14,8 +14,6 @@ import java.util.HashSet;
 import java.util.List;
 import java.util.Random;
 import java.util.Set;
-import java.util.logging.Level;
-import java.util.logging.Logger;
 import org.apache.lucene.codecs.Codec;
 import org.apache.lucene.document.Document;
 import org.apache.lucene.document.Field;
@@ -41,12 +39,14 @@ import org.apache.lucene.tests.util.LuceneTestCase.SuppressSysoutChecks;
 import org.apache.lucene.tests.util.TestUtil;
 import org.junit.BeforeClass;
 import org.junit.Test;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 @SuppressSysoutChecks(bugUrl = "")
 public class TestAcceleratedHNSWDeletedDocuments extends LuceneTestCase {
 
-  protected static Logger log =
-      Logger.getLogger(TestAcceleratedHNSWDeletedDocuments.class.getName());
+  private static final Logger LOG =
+      LoggerFactory.getLogger(TestAcceleratedHNSWDeletedDocuments.class);
 
   static final Codec codec =
       TestUtil.alwaysKnnVectorsFormat(new Lucene99AcceleratedHNSWVectorsFormat());
@@ -108,7 +108,7 @@ public class TestAcceleratedHNSWDeletedDocuments extends LuceneTestCase {
           int id = Integer.parseInt(docId);
           assertFalse(
               "Deleted document " + id + " should not appear in results", deletedDocs.contains(id));
-          log.log(Level.FINE, "Found non-deleted document: " + id + ", Score: " + hit.score);
+          LOG.info("Found non-deleted document: {} Score: {}", id, hit.score);
         }
 
         // Verify deleted documents are truly deleted
@@ -181,7 +181,7 @@ public class TestAcceleratedHNSWDeletedDocuments extends LuceneTestCase {
           int id = Integer.parseInt(docId);
           assertFalse("Deleted document should not appear", deletedDocs.contains(id));
           assertFalse("Document without vector should not appear", docsWithoutVectors.contains(id));
-          log.log(Level.FINE, "Found document with vector: " + id + ", Score: " + hit.score);
+          LOG.info("Found document with vector: {}, score: {}", id, hit.score);
         }
 
         // Test filtered search with deletions
@@ -307,13 +307,10 @@ public class TestAcceleratedHNSWDeletedDocuments extends LuceneTestCase {
           assertTrue("Result should be from active documents", activeDocIds.contains(id));
         }
 
-        log.log(
-            Level.FINE,
-            "Search returned "
-                + hits.length
-                + " results from "
-                + activeDocIds.size()
-                + " active documents");
+        LOG.info(
+            "Search returned {} results from {} active documents",
+            hits.length,
+            activeDocIds.size());
       }
     }
   }

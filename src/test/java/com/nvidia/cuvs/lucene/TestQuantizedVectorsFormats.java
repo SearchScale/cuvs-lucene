@@ -12,8 +12,6 @@ import com.carrotsearch.randomizedtesting.annotations.Name;
 import com.carrotsearch.randomizedtesting.annotations.ParametersFactory;
 import java.util.Arrays;
 import java.util.List;
-import java.util.logging.Level;
-import java.util.logging.Logger;
 import org.apache.lucene.codecs.Codec;
 import org.apache.lucene.codecs.KnnVectorsFormat;
 import org.apache.lucene.document.Document;
@@ -33,12 +31,13 @@ import org.apache.lucene.tests.util.LuceneTestCase.SuppressSysoutChecks;
 import org.apache.lucene.tests.util.TestUtil;
 import org.junit.BeforeClass;
 import org.junit.Ignore;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 @SuppressSysoutChecks(bugUrl = "")
 public class TestQuantizedVectorsFormats extends BaseKnnVectorsFormatTestCase {
 
-  private static final Logger log = Logger.getLogger(TestQuantizedVectorsFormats.class.getName());
-
+  private static final Logger LOG = LoggerFactory.getLogger(TestQuantizedVectorsFormats.class);
   private static KnnVectorsFormat knnVectorsFormat;
 
   public TestQuantizedVectorsFormats(@Name("knnVectorsWriter") KnnVectorsFormat knnVectorsFormat) {
@@ -61,7 +60,7 @@ public class TestQuantizedVectorsFormats extends BaseKnnVectorsFormatTestCase {
 
   @Override
   protected Codec getCodec() {
-    log.log(Level.FINE, "Running tests for: " + knnVectorsFormat.getName());
+    LOG.trace("Running tests for: {}", knnVectorsFormat.getName());
     return TestUtil.alwaysKnnVectorsFormat(knnVectorsFormat);
   }
 

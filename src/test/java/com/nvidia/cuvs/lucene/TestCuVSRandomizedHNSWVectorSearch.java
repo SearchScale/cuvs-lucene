@@ -15,8 +15,6 @@ import java.util.List;
 import java.util.Map;
 import java.util.Random;
 import java.util.TreeMap;
-import java.util.logging.Level;
-import java.util.logging.Logger;
 import org.apache.lucene.codecs.Codec;
 import org.apache.lucene.document.Document;
 import org.apache.lucene.document.Field;
@@ -41,13 +39,14 @@ import org.apache.lucene.tests.util.TestUtil;
 import org.junit.AfterClass;
 import org.junit.BeforeClass;
 import org.junit.Test;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 @SuppressSysoutChecks(bugUrl = "")
 public class TestCuVSRandomizedHNSWVectorSearch extends LuceneTestCase {
 
-  protected static Logger log =
-      Logger.getLogger(TestCuVSRandomizedHNSWVectorSearch.class.getName());
-
+  private static final Logger LOG =
+      LoggerFactory.getLogger(TestCuVSRandomizedHNSWVectorSearch.class);
   static final Codec codec =
       TestUtil.alwaysKnnVectorsFormat(new Lucene99AcceleratedHNSWVectorsFormat());
   static IndexSearcher searcher;
@@ -74,7 +73,7 @@ public class TestCuVSRandomizedHNSWVectorSearch extends LuceneTestCase {
                 .setCodec(codec)
                 .setMergePolicy(newTieredMergePolicy()));
 
-    log.log(Level.FINE, "Merge Policy: " + writer.w.getConfig().getMergePolicy());
+    LOG.trace("Merge Policy: {}", writer.w.getConfig().getMergePolicy());
 
     Random random = random();
     int datasetSize = random.nextInt(DATASET_SIZE_LIMIT) + 1;
@@ -108,7 +107,7 @@ public class TestCuVSRandomizedHNSWVectorSearch extends LuceneTestCase {
     searcher = null;
     reader = null;
     directory = null;
-    log.log(Level.FINE, "Test finished");
+    LOG.trace("Test finished");
   }
 
   @Test
@@ -122,21 +121,20 @@ public class TestCuVSRandomizedHNSWVectorSearch extends LuceneTestCase {
     float[][] queries = generateQueries(random, dataset[0].length, numQueries);
     List<List<Integer>> expected = generateExpectedResults(topK, dataset, queries);
 
-    log.log(Level.FINE, "Dataset size: " + dataset.length + "x" + dataset[0].length);
-    log.log(Level.FINE, "Query size: " + numQueries + "x" + queries[0].length);
-    log.log(Level.FINE, "TopK: " + topK);
+    LOG.trace("Dataset size: {}x{}", dataset.length, dataset[0].length);
+    LOG.trace("Query size: {}x{}", numQueries, queries[0].length);
+    LOG.trace("TopK: {}", topK);
 
     Query query = new KnnFloatVectorQuery("vector", queries[0], topK);
     int correct[] = new int[topK];
     for (int i = 0; i < topK; i++) correct[i] = expected.get(0).get(i);
 
     ScoreDoc[] hits = searcher.search(query, topK).scoreDocs;
-    log.log(Level.FINE, "RESULTS: " + Arrays.toString(hits));
-    log.log(Level.FINE, "EXPECTD: " + expected.get(0));
+    LOG.trace("RESULTS: {}", Arrays.toString(hits));
+    LOG.trace("EXPECTD: {}", expected.get(0));
 
     for (ScoreDoc hit : hits) {
-      log.log(
-          Level.FINE, "\t" + reader.storedFields().document(hit.doc).get("id") + ": " + hit.score);
+      LOG.trace("\t" + reader.storedFields().document(hit.doc).get("id") + ": " + hit.score);
     }
 
     for (ScoreDoc hit : hits) {
@@ -161,7 +159,7 @@ public class TestCuVSRandomizedHNSWVectorSearch extends LuceneTestCase {
       }
 
       Map<Integer, Double> sorted = new TreeMap<Integer, Double>(distances);
-      log.log(Level.FINE, "EXPECTED: " + sorted);
+      LOG.trace("EXPECTED: {}", sorted);
 
       // Sort by distance and select the topK nearest neighbors
       List<Integer> neighbors =
@@ -172,7 +170,7 @@ public class TestCuVSRandomizedHNSWVectorSearch extends LuceneTestCase {
       neighborsResult.add(neighbors.subList(0, Math.min(topK * 3, dataset.length)));
     }
 
-    log.log(Level.FINE, "Expected results generated successfully.");
+    LOG.trace("Expected results generated successfully.");
     return neighborsResult;
   }
 
@@ -213,6 +211,6 @@ public class TestCuVSRandomizedHNSWVectorSearch extends LuceneTestCase {
       assertEquals("All results should match the filter", targetDocId, docId);
     }
 
-    log.log(Level.FINE, "Prefiltering test passed with " + filteredHits.length + " results");
+    LOG.trace("Prefiltering test passed with {} results", filteredHits.length);
   }
 }

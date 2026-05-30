@@ -25,17 +25,18 @@ import static java.lang.Integer.MAX_VALUE;
 import static java.lang.Integer.MIN_VALUE;
 
 import java.util.Random;
-import java.util.logging.Logger;
 import org.apache.lucene.tests.util.LuceneTestCase;
 import org.apache.lucene.tests.util.LuceneTestCase.SuppressSysoutChecks;
 import org.junit.BeforeClass;
 import org.junit.Test;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 @SuppressSysoutChecks(bugUrl = "")
 public class TestGPUSearchParams extends LuceneTestCase {
 
   @SuppressWarnings("unused")
-  private static final Logger log = Logger.getLogger(TestGPUSearchParams.class.getName());
+  private static final Logger LOG = LoggerFactory.getLogger(TestGPUSearchParams.class);
 
   private static Random random;
 

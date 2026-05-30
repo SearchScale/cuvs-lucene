@@ -8,8 +8,6 @@ import static com.nvidia.cuvs.lucene.ThreadLocalCuVSResourcesProvider.isSupporte
 
 import com.nvidia.cuvs.LibraryException;
 import java.io.IOException;
-import java.util.logging.Level;
-import java.util.logging.Logger;
 import org.apache.lucene.codecs.KnnVectorsFormat;
 import org.apache.lucene.codecs.KnnVectorsReader;
 import org.apache.lucene.codecs.KnnVectorsWriter;
@@ -17,6 +15,8 @@ import org.apache.lucene.codecs.hnsw.DefaultFlatVectorScorer;
 import org.apache.lucene.codecs.hnsw.FlatVectorsFormat;
 import org.apache.lucene.index.SegmentReadState;
 import org.apache.lucene.index.SegmentWriteState;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 /**
  * cuVS based Binary Quantized KnnVectorsFormat for indexing on GPU and searching on the CPU.
@@ -25,8 +25,8 @@ import org.apache.lucene.index.SegmentWriteState;
  */
 public class LuceneAcceleratedHNSWBinaryQuantizedVectorsFormat extends KnnVectorsFormat {
 
-  private static final Logger log =
-      Logger.getLogger(LuceneAcceleratedHNSWBinaryQuantizedVectorsFormat.class.getName());
+  private static final Logger LOG =
+      LoggerFactory.getLogger(LuceneAcceleratedHNSWBinaryQuantizedVectorsFormat.class);
   private static final LuceneProvider LUCENE102_PROVIDER;
   private static final LuceneProvider LUCENE99_PROVIDER;
   private static final FlatVectorsFormat FLAT_VECTORS_FORMAT;
@@ -72,16 +72,14 @@ public class LuceneAcceleratedHNSWBinaryQuantizedVectorsFormat extends KnnVector
   public KnnVectorsWriter fieldsWriter(SegmentWriteState state) throws IOException {
     var flatWriter = FLAT_VECTORS_FORMAT.fieldsWriter(state);
     if (isSupported()) {
-      log.log(
-          Level.FINE,
+      LOG.info(
           "cuVS is supported so using the Lucene99AcceleratedHNSWBinaryQuantizedVectorsWriter");
       return new LuceneAcceleratedHNSWBinaryQuantizedVectorsWriter(
           state, acceleratedHNSWParams, flatWriter);
     } else {
       try {
         // Fallback to Lucene's Lucene102HnswBinaryQuantizedVectorsFormat format
-        log.log(
-            Level.WARNING,
+        LOG.warn(
             "GPU based indexing not supported, falling back to using the"
                 + " Lucene102HnswBinaryQuantizedVectorsFormat");
         KnnVectorsFormat fallbackFormat =

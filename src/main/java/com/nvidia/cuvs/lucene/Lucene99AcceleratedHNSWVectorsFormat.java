@@ -8,8 +8,6 @@ import static com.nvidia.cuvs.lucene.ThreadLocalCuVSResourcesProvider.isSupporte
 
 import com.nvidia.cuvs.LibraryException;
 import java.io.IOException;
-import java.util.logging.Level;
-import java.util.logging.Logger;
 import org.apache.lucene.codecs.KnnVectorsFormat;
 import org.apache.lucene.codecs.KnnVectorsReader;
 import org.apache.lucene.codecs.KnnVectorsWriter;
@@ -18,6 +16,8 @@ import org.apache.lucene.codecs.hnsw.FlatVectorsFormat;
 import org.apache.lucene.index.SegmentReadState;
 import org.apache.lucene.index.SegmentWriteState;
 import org.apache.lucene.search.TaskExecutor;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 /**
  * cuVS based KnnVectorsFormat for indexing on GPU and searching on the CPU.
@@ -26,8 +26,8 @@ import org.apache.lucene.search.TaskExecutor;
  */
 public class Lucene99AcceleratedHNSWVectorsFormat extends KnnVectorsFormat {
 
-  private static final Logger log =
-      Logger.getLogger(Lucene99AcceleratedHNSWVectorsFormat.class.getName());
+  private static final Logger LOG =
+      LoggerFactory.getLogger(Lucene99AcceleratedHNSWVectorsFormat.class);
   private static final FlatVectorsFormat FLAT_VECTORS_FORMAT;
   private static final int MAX_DIMENSIONS = 4096;
   private final AcceleratedHNSWParams acceleratedHNSWParams;
@@ -76,11 +76,10 @@ public class Lucene99AcceleratedHNSWVectorsFormat extends KnnVectorsFormat {
   public KnnVectorsWriter fieldsWriter(SegmentWriteState state) throws IOException {
     var flatWriter = FLAT_VECTORS_FORMAT.fieldsWriter(state);
     if (isSupported()) {
-      log.log(Level.FINE, "cuVS is supported so using the Lucene99AcceleratedHNSWVectorsWriter");
+      LOG.info("cuVS is supported so using the Lucene99AcceleratedHNSWVectorsWriter");
       return new Lucene99AcceleratedHNSWVectorsWriter(state, acceleratedHNSWParams, flatWriter);
     } else {
-      log.log(
-          Level.WARNING,
+      LOG.warn(
           "GPU based indexing not supported, falling back to using the Lucene99HnswVectorsWriter");
       try {
         return LUCENE_PROVIDER.getLuceneHnswVectorsWriterInstance(

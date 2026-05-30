@@ -12,11 +12,11 @@ import java.io.IOException;
 import java.time.Duration;
 import java.util.ArrayList;
 import java.util.List;
-import java.util.logging.Level;
-import java.util.logging.Logger;
 import org.apache.lucene.index.FloatVectorValues;
 import org.apache.lucene.index.KnnVectorValues;
 import org.apache.lucene.util.InfoStream;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 /**
  * This class provides common static utility methods.
@@ -25,7 +25,7 @@ import org.apache.lucene.util.InfoStream;
  */
 public class Utils {
 
-  static final Logger log = Logger.getLogger(Utils.class.getName());
+  private static final Logger LOG = LoggerFactory.getLogger(Utils.class);
 
   /**
    * A utility method that throws specific types of throwable objects based on types.
@@ -144,19 +144,17 @@ public class Utils {
     try {
       System.loadLibrary("cudart");
     } catch (UnsatisfiedLinkError e) {
-      log.log(Level.WARNING, "Could not load CUDA runtime library: " + e.getMessage());
+      LOG.error("Could not load CUDA runtime library: {}", e.getMessage());
     }
     try {
       return CuVSResources.create();
     } catch (UnsupportedOperationException uoe) {
-      log.log(
-          Level.WARNING,
-          "cuVS is not supported on this platform or java version: " + uoe.getMessage());
+      LOG.warn("cuVS is not supported on this platform or java version: {}", uoe.getMessage());
     } catch (Throwable t) {
       if (t instanceof ExceptionInInitializerError ex) {
         t = ex.getCause();
       }
-      log.log(Level.WARNING, "Exception occurred during creation of cuVS resources. " + t);
+      LOG.warn("Exception occurred during creation of cuVS resources. {}", t);
     }
     return null;
   }

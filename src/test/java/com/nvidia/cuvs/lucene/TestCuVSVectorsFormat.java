@@ -25,9 +25,14 @@ import org.apache.lucene.tests.util.LuceneTestCase.SuppressSysoutChecks;
 import org.apache.lucene.tests.util.TestUtil;
 import org.junit.BeforeClass;
 import org.junit.Ignore;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 @SuppressSysoutChecks(bugUrl = "")
 public class TestCuVSVectorsFormat extends BaseKnnVectorsFormatTestCase {
+
+  @SuppressWarnings("unused")
+  private static final Logger LOG = LoggerFactory.getLogger(TestCuVSVectorsFormat.class);
 
   @BeforeClass
   public static void beforeClass() {

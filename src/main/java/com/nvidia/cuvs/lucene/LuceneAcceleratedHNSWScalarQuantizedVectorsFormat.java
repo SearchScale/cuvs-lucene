@@ -8,13 +8,14 @@ import static com.nvidia.cuvs.lucene.ThreadLocalCuVSResourcesProvider.isSupporte
 
 import com.nvidia.cuvs.LibraryException;
 import java.io.IOException;
-import java.util.logging.Logger;
 import org.apache.lucene.codecs.KnnVectorsFormat;
 import org.apache.lucene.codecs.KnnVectorsReader;
 import org.apache.lucene.codecs.KnnVectorsWriter;
 import org.apache.lucene.codecs.hnsw.FlatVectorsFormat;
 import org.apache.lucene.index.SegmentReadState;
 import org.apache.lucene.index.SegmentWriteState;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 /**
  * cuVS based Scalar Quantized KnnVectorsFormat for indexing on GPU and searching on the CPU.
@@ -23,8 +24,8 @@ import org.apache.lucene.index.SegmentWriteState;
  */
 public class LuceneAcceleratedHNSWScalarQuantizedVectorsFormat extends KnnVectorsFormat {
 
-  private static final Logger log =
-      Logger.getLogger(LuceneAcceleratedHNSWScalarQuantizedVectorsFormat.class.getName());
+  private static final Logger LOG =
+      LoggerFactory.getLogger(LuceneAcceleratedHNSWScalarQuantizedVectorsFormat.class);
   private static final LuceneProvider LUCENE_PROVIDER;
   private static final FlatVectorsFormat FLAT_VECTORS_FORMAT;
   private static final int MAX_DIMENSIONS = 4096;
@@ -67,13 +68,13 @@ public class LuceneAcceleratedHNSWScalarQuantizedVectorsFormat extends KnnVector
   public KnnVectorsWriter fieldsWriter(SegmentWriteState state) throws IOException {
     var flatWriter = FLAT_VECTORS_FORMAT.fieldsWriter(state);
     if (isSupported()) {
-      log.info("cuVS is supported so using the Lucene99AcceleratedHNSWQuantizedVectorsWriter");
+      LOG.info("cuVS is supported so using the Lucene99AcceleratedHNSWQuantizedVectorsWriter");
       return new LuceneAcceleratedHNSWScalarQuantizedVectorsWriter(
           state, acceleratedHNSWParams, flatWriter);
     } else {
       try {
         // Fallback to Lucene's Lucene99HnswScalarQuantizedVectorsFormat
-        log.warning(
+        LOG.warn(
             "GPU based indexing not supported, falling back to using the"
                 + " Lucene99HnswScalarQuantizedVectorsFormat");
         KnnVectorsFormat fallbackFormat =
